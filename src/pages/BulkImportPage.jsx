@@ -293,7 +293,6 @@ export default function BulkImportPage() {
             const { data: newLead, error: insertErr } = await supabase
               .from('leads').insert(payload).select().single()
             if (insertErr) throw insertErr
-            await autoAssignLead(newLead.id)
             newCount++
             rowResults.push({
               row: i + 2, name: row.name, phone: row.phone,
