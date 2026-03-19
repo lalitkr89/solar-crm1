@@ -1093,6 +1093,8 @@ function EditLeadModal({ open, lead, onClose, onSaved, userId, userName }) {
       const payload = { ...form }
       NUMERIC.forEach(f => { payload[f] = payload[f] !== '' && payload[f] != null ? Number(payload[f]) : null })
       Object.keys(payload).forEach(k => { if (payload[k] === '') payload[k] = null })
+      // PS Agent clear hone pe assigned_to bhi clear karo
+      if (!payload.presales_agent_id) payload.assigned_to = null
 
       if (isMeetingDisposition(form.disposition) && form.meeting_date && form.meeting_slot) {
         payload.stage = 'meeting_scheduled'
