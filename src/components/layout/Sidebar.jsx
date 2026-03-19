@@ -3,15 +3,15 @@ import { useAuth } from '@/context/AuthContext'
 import {
   LayoutDashboard, Kanban, Phone, Users, Wallet,
   HardHat, Shield, CalendarCheck, Zap, LogOut,
-  ChevronRight, UserCog,
+  ChevronRight, UserCog, Upload,
 } from 'lucide-react'
 
 const TEAM_COLOR = {
   presales: '#7F77DD',
-  sales:    '#378ADD',
-  finance:  '#1D9E75',
-  ops:      '#D85A30',
-  amc:      '#BA7517',
+  sales: '#378ADD',
+  finance: '#1D9E75',
+  ops: '#D85A30',
+  amc: '#BA7517',
 }
 
 export default function Sidebar() {
@@ -41,9 +41,9 @@ export default function Sidebar() {
 
       {/* User pill */}
       <div className="mx-3 my-3 p-2.5 rounded-xl flex items-center gap-2.5"
-           style={{ background: 'rgba(255,255,255,0.06)' }}>
+        style={{ background: 'rgba(255,255,255,0.06)' }}>
         <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold text-white flex-shrink-0"
-             style={{ background: teamColor }}>
+          style={{ background: teamColor }}>
           {initial}
         </div>
         <div className="min-w-0">
@@ -76,6 +76,9 @@ export default function Sidebar() {
             <div className="section-label">Pre-sales</div>
             <NavLink to="/presales" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
               <Phone size={15} /> Calling dashboard
+            </NavLink>
+            <NavLink to="/bulk-import" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+              <Upload size={15} /> Bulk import
             </NavLink>
           </>
         )}

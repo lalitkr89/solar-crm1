@@ -2,23 +2,24 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from '@/context/AuthContext'
 
 // Pages
-import LoginPage       from '@/pages/LoginPage'
-import DashboardPage   from '@/pages/DashboardPage'
+import LoginPage from '@/pages/LoginPage'
+import DashboardPage from '@/pages/DashboardPage'
 import LeadProfilePage from '@/pages/LeadProfilePage'
-import KanbanPage      from '@/pages/KanbanPage'
-import TodayPage       from '@/pages/TodayPage'
-import PresalesPage    from '@/pages/PresalesPage'
-import SalesPage       from '@/pages/SalesPage'
-import FinancePage     from '@/pages/FinancePage'
-import OpsPage         from '@/pages/OpsPage'
-import AmcPage         from '@/pages/AmcPage'
-import UsersPage       from '@/pages/UsersPage'
-import NotFoundPage    from '@/pages/NotFoundPage'
+import KanbanPage from '@/pages/KanbanPage'
+import TodayPage from '@/pages/TodayPage'
+import PresalesPage from '@/pages/PresalesPage'
+import SalesPage from '@/pages/SalesPage'
+import FinancePage from '@/pages/FinancePage'
+import OpsPage from '@/pages/OpsPage'
+import AmcPage from '@/pages/AmcPage'
+import UsersPage from '@/pages/UsersPage'
+import NotFoundPage from '@/pages/NotFoundPage'
+import BulkImportPage from '@/pages/BulkImportPage'
 
 function RequireAuth({ children }) {
   const { user, loading } = useAuth()
   if (loading) return <FullScreenLoader />
-  if (!user)   return <Navigate to="/login" replace />
+  if (!user) return <Navigate to="/login" replace />
   return children
 }
 
@@ -66,7 +67,7 @@ function AppRoutes() {
 
       <Route path="/kanban" element={
         <RequireAuth>
-          <RequireRole roles={['super_admin','presales_manager','sales_manager','finance_manager','ops_manager','amc_manager']}>
+          <RequireRole roles={['super_admin', 'presales_manager', 'sales_manager', 'finance_manager', 'ops_manager', 'amc_manager']}>
             <KanbanPage />
           </RequireRole>
         </RequireAuth>
@@ -74,7 +75,7 @@ function AppRoutes() {
 
       <Route path="/presales" element={
         <RequireAuth>
-          <RequireRole roles={['super_admin','presales_manager','presales_agent']}>
+          <RequireRole roles={['super_admin', 'presales_manager', 'presales_agent']}>
             <PresalesPage />
           </RequireRole>
         </RequireAuth>
@@ -82,7 +83,7 @@ function AppRoutes() {
 
       <Route path="/sales" element={
         <RequireAuth>
-          <RequireRole roles={['super_admin','sales_manager','sales_agent']}>
+          <RequireRole roles={['super_admin', 'sales_manager', 'sales_agent']}>
             <SalesPage />
           </RequireRole>
         </RequireAuth>
@@ -90,7 +91,7 @@ function AppRoutes() {
 
       <Route path="/finance" element={
         <RequireAuth>
-          <RequireRole roles={['super_admin','finance_manager','finance_agent']}>
+          <RequireRole roles={['super_admin', 'finance_manager', 'finance_agent']}>
             <FinancePage />
           </RequireRole>
         </RequireAuth>
@@ -98,7 +99,7 @@ function AppRoutes() {
 
       <Route path="/ops" element={
         <RequireAuth>
-          <RequireRole roles={['super_admin','ops_manager','ops_agent']}>
+          <RequireRole roles={['super_admin', 'ops_manager', 'ops_agent']}>
             <OpsPage />
           </RequireRole>
         </RequireAuth>
@@ -106,7 +107,7 @@ function AppRoutes() {
 
       <Route path="/amc" element={
         <RequireAuth>
-          <RequireRole roles={['super_admin','amc_manager','amc_agent']}>
+          <RequireRole roles={['super_admin', 'amc_manager', 'amc_agent']}>
             <AmcPage />
           </RequireRole>
         </RequireAuth>
@@ -116,6 +117,13 @@ function AppRoutes() {
         <RequireAuth>
           <RequireRole roles={['super_admin']}>
             <UsersPage />
+          </RequireRole>
+        </RequireAuth>
+      } />
+      <Route path="/bulk-import" element={
+        <RequireAuth>
+          <RequireRole roles={['super_admin', 'presales_manager']}>
+            <BulkImportPage />
           </RequireRole>
         </RequireAuth>
       } />

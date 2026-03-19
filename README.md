@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Solar CRM — React App
 
 ## Setup
@@ -72,3 +73,7 @@ src/
 npm run build
 # Output in /dist — deploy to Vercel, Netlify, or any static host
 ```
+=======
+# solar-crm1
+Solar CRM 1
+>>>>>>> 2f2d0dbae8491035e8e958b4c7ab381999d08d08

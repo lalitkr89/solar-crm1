@@ -31,33 +31,27 @@ export const ALL_DISPOSITIONS = [
   ...CONNECTED_DISPOSITIONS,
 ]
 
-// ── Exact logic from your Streamlit disp_css() — keyword-based ──
 export function getDispositionStyle(val) {
   if (!val) return { bg: '#F1F5F9', text: '#475569', border: '#CBD5E1' }
-  if (val.includes('Meeting'))       return { bg: '#DCFCE7', text: '#14532D', border: '#86EFAC' }
+  if (val.includes('Meeting')) return { bg: '#DCFCE7', text: '#14532D', border: '#86EFAC' }
   if (val.includes('Not Connected')) return { bg: '#FEE2E2', text: '#7F1D1D', border: '#FCA5A5' }
-  if (val.includes('Call Later'))    return { bg: '#DBEAFE', text: '#1E3A8A', border: '#93C5FD' }
-  if (val.includes('Meet Later'))    return { bg: '#DBEAFE', text: '#1E3A8A', border: '#93C5FD' }
+  if (val.includes('Call Later')) return { bg: '#DBEAFE', text: '#1E3A8A', border: '#93C5FD' }
+  if (val.includes('Meet Later')) return { bg: '#DBEAFE', text: '#1E3A8A', border: '#93C5FD' }
   if (val.includes('Non Qualified')) return { bg: '#F1F5F9', text: '#475569', border: '#CBD5E1' }
-  if (val.includes('Not Interested'))return { bg: '#F8FAFC', text: '#64748B', border: '#E2E8F0' }
-  if (val.includes('Not Serviceable'))return { bg: '#FFF7ED', text: '#7C2D12', border: '#FDBA74' }
-  if (val.includes('Commercial'))    return { bg: '#EDE9FE', text: '#4C1D95', border: '#C4B5FD' }
-  if (val.includes('Invalid'))       return { bg: '#FEE2E2', text: '#7F1D1D', border: '#FCA5A5' }
-  if (val.includes('Housing'))       return { bg: '#FAF5FF', text: '#581C87', border: '#D8B4FE' }
-  if (val.includes('SolarPro'))      return { bg: '#FDF4FF', text: '#701A75', border: '#E879F9' }
-  if (val.includes('Language'))      return { bg: '#F8FAFC', text: '#64748B', border: '#E2E8F0' }
-  // default — blue (matches Streamlit fallback)
+  if (val.includes('Not Interested')) return { bg: '#F8FAFC', text: '#64748B', border: '#E2E8F0' }
+  if (val.includes('Not Serviceable')) return { bg: '#FFF7ED', text: '#7C2D12', border: '#FDBA74' }
+  if (val.includes('Commercial')) return { bg: '#EDE9FE', text: '#4C1D95', border: '#C4B5FD' }
+  if (val.includes('Invalid')) return { bg: '#FEE2E2', text: '#7F1D1D', border: '#FCA5A5' }
+  if (val.includes('Housing')) return { bg: '#FAF5FF', text: '#581C87', border: '#D8B4FE' }
+  if (val.includes('SolarPro')) return { bg: '#FDF4FF', text: '#701A75', border: '#E879F9' }
+  if (val.includes('Language')) return { bg: '#F8FAFC', text: '#64748B', border: '#E2E8F0' }
   return { bg: '#EFF6FF', text: '#1D4ED8', border: '#BFDBFE' }
 }
 
-// ── Scheduling logic — exact match to Streamlit behaviour ──
-
-// Only "Meeting Scheduled (BD)" triggers meeting scheduling + auto stage move
 export function isMeetingDisposition(val) {
   return val?.includes('Meeting') ?? false
 }
 
-// These trigger callback date/slot picker
 export function isCallbackDisposition(val) {
   return (
     val?.includes('Call Later') ||
@@ -65,7 +59,6 @@ export function isCallbackDisposition(val) {
   ) ?? false
 }
 
-// These are terminal — lead goes to closed/lost
 export function isTerminalDisposition(val) {
   return (
     val?.includes('Not Interested') ||
