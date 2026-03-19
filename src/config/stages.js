@@ -1,0 +1,54 @@
+export const STAGES = {
+  new:               { label: 'New Lead',          team: 'presales', color: '#7F77DD', order: 1 },
+  meeting_scheduled: { label: 'Meeting Scheduled', team: 'presales', color: '#378ADD', order: 2 },
+  meeting_done:      { label: 'Meeting Done',      team: 'sales',    color: '#378ADD', order: 3 },
+  qc_followup:       { label: 'QC Follow-up',      team: 'presales', color: '#EF9F27', order: 4 },
+  sale_closed:       { label: 'Sale Closed',       team: 'sales',    color: '#639922', order: 5 },
+  finance_approval:  { label: 'Finance Approval',  team: 'finance',  color: '#1D9E75', order: 6 },
+  ops_documents:     { label: 'Ops — Documents',   team: 'ops',      color: '#D85A30', order: 7 },
+  name_load_change:  { label: 'Name/Load Change',  team: 'ops',      color: '#BA7517', order: 8 },
+  net_metering:      { label: 'Net Metering',      team: 'ops',      color: '#BA7517', order: 9 },
+  installation:      { label: 'Installation',      team: 'ops',      color: '#0F6E56', order: 10 },
+  installed:         { label: 'Installed',         team: 'amc',      color: '#0F6E56', order: 11 },
+  amc_active:        { label: 'AMC Active',        team: 'amc',      color: '#1D9E75', order: 12 },
+  not_interested:    { label: 'Not Interested',    team: null,       color: '#E24B4A', order: 99 },
+  non_qualified:     { label: 'Non Qualified',     team: null,       color: '#888780', order: 99 },
+  lost:              { label: 'Lost',              team: null,       color: '#888780', order: 99 },
+}
+
+// Which stages each role can ACCESS
+export const ROLE_STAGE_ACCESS = {
+  presales_agent:   ['new', 'meeting_scheduled', 'qc_followup'],
+  presales_manager: ['new', 'meeting_scheduled', 'qc_followup'],
+  sales_agent:      ['meeting_scheduled', 'meeting_done', 'qc_followup', 'sale_closed'],
+  sales_manager:    ['meeting_scheduled', 'meeting_done', 'qc_followup', 'sale_closed'],
+  finance_agent:    ['sale_closed', 'finance_approval'],
+  finance_manager:  ['sale_closed', 'finance_approval'],
+  ops_agent:        ['finance_approval', 'ops_documents', 'name_load_change', 'net_metering', 'installation', 'installed'],
+  ops_manager:      ['finance_approval', 'ops_documents', 'name_load_change', 'net_metering', 'installation', 'installed'],
+  amc_agent:        ['installed', 'amc_active'],
+  amc_manager:      ['installed', 'amc_active'],
+  super_admin:      Object.keys(STAGES),
+}
+
+// Which stage a role lands on after login (default view)
+export const ROLE_DEFAULT_STAGE = {
+  presales_agent:   'new',
+  presales_manager: 'new',
+  sales_agent:      'meeting_scheduled',
+  sales_manager:    'meeting_scheduled',
+  finance_agent:    'sale_closed',
+  finance_manager:  'sale_closed',
+  ops_agent:        'ops_documents',
+  ops_manager:      'ops_documents',
+  amc_agent:        'amc_active',
+  amc_manager:      'amc_active',
+  super_admin:      'new',
+}
+
+export const PAYMENT_MILESTONES = [
+  { key: 'advance',       label: 'Advance' },
+  { key: 'commissioning', label: 'Commissioning' },
+  { key: 'final_delivery',label: 'Final Delivery' },
+  { key: 'amc_renewal',   label: 'AMC Renewal' },
+]
