@@ -3,7 +3,6 @@ import Layout from '@/components/layout/Layout'
 import { PageHeader, Spinner } from '@/components/ui'
 import { supabase } from '@/lib/supabase'
 import { cleanPhone } from '@/lib/phone'
-import { autoAssignLead } from '@/lib/assignment'
 import { Upload, Download, CheckCircle2, AlertCircle, RefreshCw, FileText, X, ChevronDown, ChevronUp } from 'lucide-react'
 
 // ── Valid dropdown values ─────────────────────────────────────
