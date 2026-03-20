@@ -240,6 +240,14 @@ export default function BulkImportPage() {
         const raw = rows[i]
         const row = normalizeRow(raw)
 
+        // Scientific notation check — Excel ne number format se bigad diya
+        if (/[eE]/.test(raw.phone ?? '')) {
+          errorList.push(`Row ${i + 2}: Phone "${raw.phone}" scientific notation mein hai — Excel mein column ko Text format karo`)
+          skippedCount++
+          rowResults.push({ row: i + 2, name: raw.name, phone: raw.phone, status: 'error', reason: 'Phone scientific notation mein hai (Excel issue) — column ko Text format karo' })
+          continue
+        }
+
         // Phone validation
         if (!row.phone || row.phone.length !== 10) {
           errorList.push(`Row ${i + 2}: Invalid phone "${raw.phone || ''}" — skipped`)
@@ -295,7 +303,7 @@ export default function BulkImportPage() {
             newCount++
             rowResults.push({
               row: i + 2, name: row.name, phone: row.phone,
-              status: 'new', detail: 'New lead created & assigned', warnings,
+              status: 'new', detail: 'New lead created (unassigned — calling start pe assign hogi)', warnings,
             })
           }
         } catch (err) {
@@ -350,7 +358,7 @@ export default function BulkImportPage() {
           <div className="flex gap-2">
             <span className="text-blue-500 font-bold text-sm">4.</span>
             <p className="text-xs text-blue-700">
-              <strong>New leads:</strong> Automatically presales team mein round-robin assign. Stage "New" set hoga.
+              <strong>New leads:</strong> Unassigned pool mein jayengi. Agent "Start Calling" press karega tab assign hongi. Stage "New" set hoga.
             </p>
           </div>
         </div>
@@ -492,8 +500,14 @@ export default function BulkImportPage() {
                         <tr key={i} className={`border-b border-slate-100 hover:bg-slate-50 ${rowErrors.length > 0 ? 'bg-red-50' : ''}`}>
                           <td className="px-3 py-2 text-sm text-slate-800">{row.name || '—'}</td>
                           <td className="px-3 py-2 text-sm font-mono">
-                            <span className={phoneValid ? 'text-green-600' : 'text-red-500'}>{cleaned || '—'}</span>
-                            {!phoneValid && cleaned && <span className="ml-1 text-xs text-red-500">⚠️ invalid</span>}
+                            {/[eE]/.test(row.phone ?? '') ? (
+                              <span className="text-red-500">{row.phone} <span className="text-xs">⚠️ invalid</span></span>
+                            ) : (
+                              <>
+                                <span className={phoneValid ? 'text-green-600' : 'text-red-500'}>{cleaned || '—'}</span>
+                                {!phoneValid && cleaned && <span className="ml-1 text-xs text-red-500">⚠️ invalid</span>}
+                              </>
+                            )}
                           </td>
                           <td className="px-3 py-2 text-sm text-slate-600">{row.city || '—'}</td>
                           <td className="px-3 py-2 text-sm">

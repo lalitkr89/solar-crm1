@@ -2,12 +2,35 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
 import Layout from '@/components/layout/Layout'
-import { PageHeader, DispBadge, StageBadge, Spinner, Modal } from '@/components/ui'
+import { PageHeader, Spinner } from '@/components/ui'
 import { supabase } from '@/lib/supabase'
-import { logActivity } from '@/lib/leadService'
 import { formatPhone, cleanPhone } from '@/lib/phone'
+import { getSalesCallingQueue, getSalesFollowUpQueue, assignSalesLeadIfUnassigned } from '@/lib/assignment'
 import { format } from 'date-fns'
-import { RefreshCw, Search, X, Filter, UserCheck, AlertCircle } from 'lucide-react'
+import { RefreshCw, Search, X, Filter, Phone, PhoneOff, TrendingUp } from 'lucide-react'
+
+// ── Sales calling mode helpers (sessionStorage) ───────────────
+export function isSalesCallingModeActive() {
+  return sessionStorage.getItem('salesCallingMode') === 'true'
+}
+export function getSalesCallingModeType() {
+  return sessionStorage.getItem('salesCallingType') ?? 'calling'
+}
+export function getSalesCallingQueueFromSession() {
+  try { return JSON.parse(sessionStorage.getItem('salesCallingQueue') ?? '[]') } catch { return [] }
+}
+export function getSalesCallingIndexFromSession() {
+  return parseInt(sessionStorage.getItem('salesCallingIndex') ?? '0', 10)
+}
+export function setSalesCallingIndex(idx) {
+  sessionStorage.setItem('salesCallingIndex', String(idx))
+}
+export function stopSalesCallingMode() {
+  sessionStorage.removeItem('salesCallingMode')
+  sessionStorage.removeItem('salesCallingType')
+  sessionStorage.removeItem('salesCallingQueue')
+  sessionStorage.removeItem('salesCallingIndex')
+}
 
 // ── Column definitions ────────────────────────────────────────
 const COLS = [
@@ -158,6 +181,9 @@ export default function SalesPage() {
   const [filterOpen, setFilterOpen] = useState(null)
   const [sortCol, setSortCol] = useState('meeting_date')
   const [sortDir, setSortDir] = useState('asc')
+  const [callingMode, setCallingMode] = useState(() => isSalesCallingModeActive())
+  const [callingType, setCallingType] = useState(() => getSalesCallingModeType())
+  const [queueLoading, setQueueLoading] = useState(false)
   const today = format(new Date(), 'yyyy-MM-dd')
 
   async function load() {
@@ -199,6 +225,51 @@ export default function SalesPage() {
   }
 
   useEffect(() => { load() }, [role])
+
+  // ── Start Calling ─────────────────────────────────────────
+  async function handleStartCalling() {
+    setQueueLoading(true)
+    const queue = await getSalesCallingQueue(profile.id)
+    if (queue.length === 0) {
+      alert('Abhi koi meeting/lead available nahi hai calling ke liye!')
+      setQueueLoading(false)
+      return
+    }
+    await assignSalesLeadIfUnassigned(queue[0].id, profile.id)
+    sessionStorage.setItem('salesCallingMode', 'true')
+    sessionStorage.setItem('salesCallingType', 'calling')
+    sessionStorage.setItem('salesCallingQueue', JSON.stringify(queue))
+    sessionStorage.setItem('salesCallingIndex', '0')
+    setCallingMode(true)
+    setCallingType('calling')
+    setQueueLoading(false)
+    navigate(`/leads/${queue[0].id}`)
+  }
+
+  // ── Start Follow Up ───────────────────────────────────────
+  async function handleStartFollowUp() {
+    setQueueLoading(true)
+    const queue = await getSalesFollowUpQueue(profile.id)
+    if (queue.length === 0) {
+      alert('Abhi koi follow up due nahi hai!')
+      setQueueLoading(false)
+      return
+    }
+    sessionStorage.setItem('salesCallingMode', 'true')
+    sessionStorage.setItem('salesCallingType', 'followup')
+    sessionStorage.setItem('salesCallingQueue', JSON.stringify(queue))
+    sessionStorage.setItem('salesCallingIndex', '0')
+    setCallingMode(true)
+    setCallingType('followup')
+    setQueueLoading(false)
+    navigate(`/leads/${queue[0].id}`)
+  }
+
+  // ── Stop ──────────────────────────────────────────────────
+  function handleStop() {
+    stopSalesCallingMode()
+    setCallingMode(false)
+  }
 
   // Global search
   const filtered = leads.filter(lead => {
@@ -257,11 +328,58 @@ export default function SalesPage() {
   return (
     <Layout>
       <PageHeader
-        title="Sales — calling dashboard"
+        title="Sales — meetings & leads"
         subtitle={`${sorted.length} of ${leads.length} leads`}
       >
         <button onClick={load} className="btn"><RefreshCw size={13} /></button>
+
+        {isSalesAgent && (
+          callingMode ? (
+            <button onClick={handleStop}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium cursor-pointer border-0"
+              style={{ background: '#dc2626', color: '#fff' }}>
+              <PhoneOff size={13} /> Stop {callingType === 'followup' ? 'Follow Up' : 'Calling'}
+            </button>
+          ) : (
+            <>
+              <button onClick={handleStartCalling} disabled={queueLoading}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium cursor-pointer border-0 disabled:opacity-60"
+                style={{ background: '#16a34a', color: '#fff' }}>
+                {queueLoading
+                  ? <><span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" /> Loading...</>
+                  : <><Phone size={13} /> Start Calling</>
+                }
+              </button>
+              <button onClick={handleStartFollowUp} disabled={queueLoading}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium cursor-pointer border-0 disabled:opacity-60"
+                style={{ background: '#7c3aed', color: '#fff' }}>
+                {queueLoading
+                  ? <><span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" /> Loading...</>
+                  : <><TrendingUp size={13} /> Start Follow Up</>
+                }
+              </button>
+            </>
+          )
+        )}
       </PageHeader>
+
+      {/* Calling mode banner */}
+      {callingMode && (
+        <div className="mb-3 px-4 py-2.5 rounded-xl flex items-center gap-3"
+          style={callingType === 'followup'
+            ? { background: '#ede9fe', border: '1px solid #c4b5fd' }
+            : { background: '#dcfce7', border: '1px solid #86efac' }}>
+          <div className={`w-2 h-2 rounded-full animate-pulse flex-shrink-0 ${callingType === 'followup' ? 'bg-purple-500' : 'bg-green-500'}`} />
+          <span className={`text-sm font-medium ${callingType === 'followup' ? 'text-purple-800' : 'text-green-800'}`}>
+            {callingType === 'followup' ? '📈 Follow Up mode active' : '📞 Calling mode active'}
+            {' — '}outcome save karne ke baad next lead automatically open hogi
+          </span>
+          <button onClick={handleStop}
+            className="ml-auto text-xs font-semibold text-red-600 hover:text-red-800 flex items-center gap-1">
+            <PhoneOff size={12} /> Stop
+          </button>
+        </div>
+      )}
 
       {/* Quick stats */}
       <div className="grid grid-cols-4 gap-3 mb-4">

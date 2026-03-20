@@ -11,7 +11,7 @@ import {
   updateLead, logActivity, moveStage, logCall
 } from '@/lib/leadService'
 import { formatPhone, waLink, callLink } from '@/lib/phone'
-import { assignToSales, assignNextUnassignedLead } from '@/lib/assignment'
+import { assignToSales, assignLeadIfUnassigned, getCallingQueue, assignSalesLeadIfUnassigned, getSalesCallingQueue, getSalesFollowUpQueue } from '@/lib/assignment'
 import {
   isCallingModeActive,
   getCallingQueueFromSession,
@@ -19,6 +19,14 @@ import {
   setCallingIndex,
   stopCallingMode,
 } from '@/pages/PresalesPage'
+import {
+  isSalesCallingModeActive,
+  getSalesCallingModeType,
+  getSalesCallingQueueFromSession,
+  getSalesCallingIndexFromSession,
+  setSalesCallingIndex,
+  stopSalesCallingMode,
+} from '@/pages/SalesPage'
 import {
   NOT_CONNECTED_DISPOSITIONS,
   CONNECTED_DISPOSITIONS,
@@ -109,12 +117,21 @@ export default function LeadProfilePage() {
   const [showSalesOutcome, setShowSalesOutcome] = useState(false)
   const [saving, setSaving] = useState(false)
 
-  // Calling mode
+  // Presales calling mode
   const callingMode = isCallingModeActive()
   const callingQueue = getCallingQueueFromSession()
   const callingIndex = getCallingIndexFromSession()
   const currentPos = callingIndex + 1
   const totalInQueue = callingQueue.length
+
+  // Sales calling mode
+  const salesCallingMode = isSalesCallingModeActive()
+  const salesCallingType = getSalesCallingModeType()
+  const salesCallingQueue = getSalesCallingQueueFromSession()
+  const salesCallingIndex = getSalesCallingIndexFromSession()
+  const salesCurrentPos = salesCallingIndex + 1
+  const salesTotalInQueue = salesCallingQueue.length
+  const isAnyCallingMode = callingMode || salesCallingMode
 
   const startRef = useRef(Date.now())
   const [elapsed, setElapsed] = useState(0)
@@ -141,17 +158,25 @@ export default function LeadProfilePage() {
   // ── Next lead navigate (calling mode) ────────────────────
   async function goToNextLead() {
     const nextIndex = callingIndex + 1
+
     if (nextIndex < callingQueue.length) {
+      // Queue mein next lead hai — assign karo agar unassigned ho
+      const nextLead = callingQueue[nextIndex]
+      await assignLeadIfUnassigned(nextLead.id, profile.id)
       setCallingIndex(nextIndex)
-      navigate(`/leads/${callingQueue[nextIndex].id}`)
+      navigate(`/leads/${nextLead.id}`)
     } else {
-      // Queue khatam — unassigned leads check karo
-      const nextLead = await assignNextUnassignedLead(profile.id)
-      if (nextLead) {
-        const updatedQueue = [...callingQueue, nextLead]
+      // Queue khatam — fresh queue lo (unassigned pool se nayi leads aayengi)
+      const freshQueue = await getCallingQueue(profile.id)
+      const currentIds = new Set(callingQueue.map(l => l.id))
+      const newLeads = freshQueue.filter(l => !currentIds.has(l.id))
+
+      if (newLeads.length > 0) {
+        await assignLeadIfUnassigned(newLeads[0].id, profile.id)
+        const updatedQueue = [...callingQueue, ...newLeads]
         sessionStorage.setItem('callingQueue', JSON.stringify(updatedQueue))
         setCallingIndex(nextIndex)
-        navigate(`/leads/${nextLead.id}`)
+        navigate(`/leads/${newLeads[0].id}`)
       } else {
         stopCallingMode()
         alert('🎉 Saari leads ho gayi! Abhi koi aur lead available nahi hai.')
@@ -163,6 +188,44 @@ export default function LeadProfilePage() {
   function handleStopCalling() {
     stopCallingMode()
     navigate('/presales')
+  }
+
+  // ── Sales: Next lead ──────────────────────────────────────
+  async function goToNextSalesLead() {
+    const nextIndex = salesCallingIndex + 1
+
+    if (nextIndex < salesCallingQueue.length) {
+      const nextLead = salesCallingQueue[nextIndex]
+      await assignSalesLeadIfUnassigned(nextLead.id, profile.id)
+      setSalesCallingIndex(nextIndex)
+      navigate(`/leads/${nextLead.id}`)
+    } else {
+      // Fresh queue lo
+      const freshQueue = salesCallingType === 'followup'
+        ? await getSalesFollowUpQueue(profile.id)
+        : await getSalesCallingQueue(profile.id)
+      const currentIds = new Set(salesCallingQueue.map(l => l.id))
+      const newLeads = freshQueue.filter(l => !currentIds.has(l.id))
+
+      if (newLeads.length > 0) {
+        if (salesCallingType === 'calling') {
+          await assignSalesLeadIfUnassigned(newLeads[0].id, profile.id)
+        }
+        const updatedQueue = [...salesCallingQueue, ...newLeads]
+        sessionStorage.setItem('salesCallingQueue', JSON.stringify(updatedQueue))
+        setSalesCallingIndex(nextIndex)
+        navigate(`/leads/${newLeads[0].id}`)
+      } else {
+        stopSalesCallingMode()
+        alert(`🎉 Saari ${salesCallingType === 'followup' ? 'follow ups' : 'meetings'} ho gayi!`)
+        navigate('/sales')
+      }
+    }
+  }
+
+  function handleStopSalesCalling() {
+    stopSalesCallingMode()
+    navigate('/sales')
   }
 
   async function saveDisposition(disp, callStatus, date, slot, scheduleType) {
@@ -242,7 +305,7 @@ export default function LeadProfilePage() {
   return (
     <Layout>
 
-      {/* ── Calling Mode Banner ── */}
+      {/* ── Presales Calling Mode Banner ── */}
       {callingMode && (
         <div className="mb-3 px-4 py-2.5 rounded-xl flex items-center gap-3"
           style={{ background: '#fef3c7', border: '1px solid #fcd34d' }}>
@@ -258,6 +321,32 @@ export default function LeadProfilePage() {
             Skip <ChevronRight size={13} />
           </button>
           <button onClick={handleStopCalling}
+            className="flex items-center gap-1 text-xs font-semibold text-red-600 hover:text-red-800 px-2 py-1 rounded-lg hover:bg-red-50 transition-colors">
+            <PhoneOff size={13} /> Stop
+          </button>
+        </div>
+      )}
+
+      {/* ── Sales Calling / Follow Up Mode Banner ── */}
+      {salesCallingMode && (
+        <div className="mb-3 px-4 py-2.5 rounded-xl flex items-center gap-3"
+          style={salesCallingType === 'followup'
+            ? { background: '#ede9fe', border: '1px solid #c4b5fd' }
+            : { background: '#dcfce7', border: '1px solid #86efac' }}>
+          <div className={`w-2 h-2 rounded-full animate-pulse flex-shrink-0 ${salesCallingType === 'followup' ? 'bg-purple-500' : 'bg-green-500'}`} />
+          <div className="flex-1">
+            <span className={`text-sm font-semibold ${salesCallingType === 'followup' ? 'text-purple-800' : 'text-green-800'}`}>
+              {salesCallingType === 'followup' ? '📈 Follow Up Mode' : '📞 Sales Calling Mode'}
+            </span>
+            <span className={`text-xs ml-2 ${salesCallingType === 'followup' ? 'text-purple-700' : 'text-green-700'}`}>
+              Lead {salesCurrentPos} of {salesTotalInQueue} — outcome save ke baad next lead khulegi
+            </span>
+          </div>
+          <button onClick={goToNextSalesLead}
+            className="flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-slate-900 px-2 py-1 rounded-lg hover:bg-white/50 transition-colors">
+            Skip <ChevronRight size={13} />
+          </button>
+          <button onClick={handleStopSalesCalling}
             className="flex items-center gap-1 text-xs font-semibold text-red-600 hover:text-red-800 px-2 py-1 rounded-lg hover:bg-red-50 transition-colors">
             <PhoneOff size={13} /> Stop
           </button>
@@ -626,9 +715,13 @@ export default function LeadProfilePage() {
         <SalesOutcomeModal
           lead={lead}
           onClose={() => setShowSalesOutcome(false)}
-          onSaved={(updates) => {
+          onSaved={async (updates) => {
             setLead(prev => ({ ...prev, ...updates }))
             setShowSalesOutcome(false)
+            // Sales calling mode mein hai toh next lead pe jao
+            if (salesCallingMode) {
+              await goToNextSalesLead()
+            }
           }}
           userId={profile?.id}
           userName={profile?.name}

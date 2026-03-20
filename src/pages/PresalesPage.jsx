@@ -5,7 +5,7 @@ import Layout from '@/components/layout/Layout'
 import { PageHeader, DispBadge, StageBadge, Spinner, Modal } from '@/components/ui'
 import { supabase } from '@/lib/supabase'
 import { createLead } from '@/lib/leadService'
-import { autoAssignLead, assignLeadToCurrentUser, getCallingQueue } from '@/lib/assignment'
+import { assignLeadToCurrentUser, assignLeadIfUnassigned, getCallingQueue } from '@/lib/assignment'
 import { formatPhone, cleanPhone } from '@/lib/phone'
 import { format } from 'date-fns'
 import { Plus, RefreshCw, Search, X, Filter, Phone, PhoneOff } from 'lucide-react'
@@ -145,7 +145,8 @@ export default function PresalesPage() {
         calling_date, callback_date, callback_slot,
         meeting_date, meeting_slot, lead_source,
         sales_outcome, sales_lead_status,
-        assigned_to, assigned_user:assigned_to(name),
+        assigned_to,
+        presales_agent_id, presales_agent:presales_agent_id(name),
         sales_agent_id, sales_agent:sales_agent_id(name),
         updated_at`)
       .in('stage', ['new', 'meeting_scheduled', 'qc_followup'])
@@ -154,7 +155,7 @@ export default function PresalesPage() {
     const { data } = await q
     setLeads((data ?? []).map(l => ({
       ...l,
-      assigned_name: l.assigned_user?.name ?? '',
+      assigned_name: l.presales_agent?.name ?? '',
       sales_agent_name: l.sales_agent?.name ?? '',
       phone_clean: cleanPhone(l.phone),
     })))
@@ -172,6 +173,8 @@ export default function PresalesPage() {
       setQueueLoading(false)
       return
     }
+    // Pehli lead assign karo — sirf tabhi jab calling shuru ho
+    await assignLeadIfUnassigned(queue[0].id, profile.id)
     sessionStorage.setItem('callingMode', 'true')
     sessionStorage.setItem('callingQueue', JSON.stringify(queue))
     sessionStorage.setItem('callingIndex', '0')
@@ -538,6 +541,7 @@ function AddLeadModal({ open, onClose, onAdded, isAgent, agentId, isManager }) {
   const [form, setForm] = useState(initialForm())
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [phoneError, setPhoneError] = useState('')
   const [dupeLead, setDupeLead] = useState(null)
   const [checkingDupe, setCheckingDupe] = useState(false)
   const [agents, setAgents] = useState([])
@@ -554,14 +558,26 @@ function AddLeadModal({ open, onClose, onAdded, isAgent, agentId, isManager }) {
   function set(f, v) { setForm(p => ({ ...p, [f]: v })) }
 
   function handleClose() {
-    onClose(); setDupeLead(null); setError(''); setForm(initialForm()); setSelAgent('')
+    onClose(); setDupeLead(null); setError(''); setPhoneError(''); setForm(initialForm()); setSelAgent('')
   }
 
   async function handlePhoneChange(val) {
     set('phone', val)
     setDupeLead(null); setError('')
+
     const cleaned = cleanPhone(val)
-    if (cleaned.length !== 10) return
+
+    // Inline error — sirf tab dikhao jab kuch type kiya ho
+    if (val.trim() === '') {
+      setPhoneError('')
+      return
+    }
+    if (cleaned.length !== 10) {
+      setPhoneError('Phone 10 digits ka hona chahiye (91, +91, 0 auto-remove ho jaata hai)')
+      return
+    }
+    setPhoneError('')
+
     setCheckingDupe(true)
     const { data: existing } = await supabase
       .from('leads')
@@ -601,6 +617,8 @@ function AddLeadModal({ open, onClose, onAdded, isAgent, agentId, isManager }) {
 
   async function handleSubmit() {
     if (!form.phone) { setError('Phone number is required'); return }
+    const cleaned = cleanPhone(form.phone)
+    if (cleaned.length !== 10) { setError('Phone number 10 digits ka hona chahiye (91, +91, 0 automatically remove ho jaata hai)'); return }
     if (dupeLead) { setError('Duplicate lead hai — "Edit Lead" button se existing lead edit karo'); return }
     setSaving(true); setError('')
     try {
@@ -608,13 +626,11 @@ function AddLeadModal({ open, onClose, onAdded, isAgent, agentId, isManager }) {
       if (isAgent) {
         // Agent ne add kiya — usko hi assign karo
         await assignLeadToCurrentUser(lead.id, agentId)
-      } else if (isManager && selAgent) {
-        // Manager ne specific agent choose kiya
+      } else if (selAgent) {
+        // Manager/Admin ne agent select kiya — usko assign karo
         await assignLeadToCurrentUser(lead.id, selAgent)
-      } else {
-        // Manager — round robin
-        await autoAssignLead(lead.id)
       }
+      // Koi select nahi = unassigned, bas
       onAdded(); setForm(initialForm()); setDupeLead(null); setSelAgent('')
     } catch (e) {
       setError(e.message || 'Error saving lead')
@@ -647,7 +663,7 @@ function AddLeadModal({ open, onClose, onAdded, isAgent, agentId, isManager }) {
               <label className="label">Phone <span className="text-red-500">*</span></label>
               <div className="relative">
                 <input
-                  className={`input pr-8 ${dupeLead ? 'border-amber-400 bg-amber-50 focus:ring-amber-400' : ''}`}
+                  className={`input pr-8 ${dupeLead ? 'border-amber-400 bg-amber-50 focus:ring-amber-400' : phoneError ? 'border-red-400 bg-red-50 focus:ring-red-400' : ''}`}
                   placeholder="10-digit mobile"
                   value={form.phone}
                   onChange={e => handlePhoneChange(e.target.value)}
@@ -658,6 +674,9 @@ function AddLeadModal({ open, onClose, onAdded, isAgent, agentId, isManager }) {
                   </div>
                 )}
               </div>
+              {phoneError && !dupeLead && (
+                <p className="mt-1 text-xs text-red-600 font-medium">⚠️ {phoneError}</p>
+              )}
               {dupeLead && (
                 <div className="mt-2 p-2.5 rounded-lg bg-amber-50 border border-amber-300">
                   <div className="flex items-start justify-between gap-2">
@@ -731,9 +750,9 @@ function AddLeadModal({ open, onClose, onAdded, isAgent, agentId, isManager }) {
           <div>
             <p className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-3 pb-1 border-b border-slate-100">Assignment</p>
             <div>
-              <label className="label">Assign to agent (optional — warna round robin)</label>
+              <label className="label">Pre-assign to agent (optional — warna unassigned pool mein jayegi)</label>
               <select className="select" value={selAgent} onChange={e => setSelAgent(e.target.value)}>
-                <option value="">— Auto assign (round robin) —</option>
+                <option value="">— Unassigned pool (calling start pe assign hogi) —</option>
                 {agents.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
               </select>
             </div>
@@ -827,9 +846,9 @@ function AddLeadModal({ open, onClose, onAdded, isAgent, agentId, isManager }) {
             Edit Existing Lead →
           </button>
         ) : (
-          <button type="button" onClick={handleSubmit} disabled={saving || !form.phone}
+          <button type="button" onClick={handleSubmit} disabled={saving || !form.phone || !!phoneError}
             className="btn-primary flex-1 justify-center disabled:opacity-50">
-            {saving ? 'Adding...' : 'Add lead & assign'}
+            {saving ? 'Adding...' : isAgent ? 'Add lead' : 'Add lead'}
           </button>
         )}
       </div>
