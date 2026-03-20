@@ -268,20 +268,6 @@ export default function LeadProfilePage() {
     }
   }
 
-  async function saveSchedule(type, date, slot) {
-    setSaving(true)
-    const field = type === 'callback' ? 'callback' : 'meeting'
-    await updateLead(id, { [`${field}_date`]: date, [`${field}_slot`]: slot })
-    await logActivity({
-      leadId: id,
-      action: type === 'callback' ? 'Callback scheduled' : 'Meeting scheduled',
-      field: `${field}_date`, oldVal: null, newVal: date,
-      userId: profile.id, userName: profile.name,
-    })
-    await load()
-    setSaving(false)
-  }
-
   async function handleMoveStage(newStage) {
     setSaving(true)
     await moveStage(lead, newStage, profile.id, profile.name)
@@ -360,18 +346,24 @@ export default function LeadProfilePage() {
             <div className="flex items-center gap-2 flex-wrap">
               <h1>{lead.name ?? '—'}</h1>
               <StageBadge stage={lead.stage} />
-              {lead.disposition && <DispBadge value={lead.disposition} />}
-              {lead.sales_outcome && (
-                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border"
-                  style={{ background: outcomeStyle.bg, color: outcomeStyle.text, borderColor: outcomeStyle.border }}>
-                  {currentOutcome?.label || lead.sales_outcome}
-                </span>
+              {lead.stage === 'new' && (
+                lead.disposition
+                  ? <DispBadge value={lead.disposition} />
+                  : <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-500 border border-slate-200">New Lead</span>
               )}
-              {lead.sales_lead_status && (
-                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border capitalize ${getLeadStatusStyle(lead.sales_lead_status)}`}>
-                  {lead.sales_lead_status.replace('_', ' ')}
-                </span>
+              {lead.stage === 'meeting_scheduled' && (
+                lead.sales_outcome ? (
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border"
+                    style={{ background: outcomeStyle.bg, color: outcomeStyle.text, borderColor: outcomeStyle.border }}>
+                    {currentOutcome?.label || lead.sales_outcome}
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-600 border border-amber-200">
+                    Update pending from sales
+                  </span>
+                )
               )}
+
             </div>
             <p className="text-sm text-slate-500 mt-0.5">
               {formatPhone(lead.phone)} · {lead.city ?? '—'} · Added {lead.created_at ? format(new Date(lead.created_at), 'd MMM yyyy') : '—'}
@@ -498,29 +490,7 @@ export default function LeadProfilePage() {
             <InfoRow label="Meeting slot" value={lead.meeting_slot} />
           </div>
 
-          {history.length > 0 && (
-            <div className="card-sm bg-slate-50 border-slate-100">
-              <div className="text-xs text-slate-500 mb-1 font-medium">Last activity</div>
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <div className="text-xs font-semibold text-slate-700">{history[0].action}</div>
-                  {history[0].old_value && history[0].new_value && (
-                    <div className="text-xs text-slate-500 mt-0.5">
-                      <span className="line-through text-red-400">{history[0].old_value?.slice(0, 30)}</span>
-                      {' → '}
-                      <span className="text-green-600 font-medium">{history[0].new_value?.slice(0, 30)}</span>
-                    </div>
-                  )}
-                </div>
-                <div className="text-right flex-shrink-0">
-                  <div className="text-xs font-medium text-slate-600">{history[0].updated_by}</div>
-                  <div className="text-xs text-slate-400">
-                    {history[0].updated_at ? format(new Date(history[0].updated_at), 'd MMM · h:mm a') : ''}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
+
 
           <div className="card">
             <h3 className="mb-3">Solar quote</h3>
@@ -529,7 +499,6 @@ export default function LeadProfilePage() {
             <InfoRow label="Quoted amount" value={lead.quoted_amount ? `₹${Number(lead.quoted_amount).toLocaleString('en-IN')}` : null} />
           </div>
 
-          <ScheduleCard onSave={saveSchedule} saving={saving} />
         </div>
 
         {/* Col 3 */}
@@ -1068,44 +1037,6 @@ function DispositionModal({ open, onClose, onSave, saving, currentDisp }) {
         {saving ? 'Saving...' : showMeetingFields ? 'Schedule meeting & move to Sales' : 'Save disposition'}
       </button>
     </Modal>
-  )
-}
-
-// ── Schedule Card ─────────────────────────────────────────────
-function ScheduleCard({ onSave, saving }) {
-  const [type, setType] = useState('callback')
-  const [date, setDate] = useState('')
-  const [slot, setSlot] = useState('')
-
-  async function handleSave() {
-    if (!date || !slot) return
-    await onSave(type, date, slot)
-    setDate(''); setSlot('')
-  }
-
-  return (
-    <div className="card">
-      <h3 className="mb-3">Quick schedule</h3>
-      <div className="flex rounded-lg border border-slate-200 overflow-hidden mb-3">
-        {['callback', 'meeting'].map(t => (
-          <button key={t} onClick={() => setType(t)}
-            className={`flex-1 py-1.5 text-xs font-medium transition-colors capitalize ${type === t ? 'bg-slate-800 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'
-              }`}>{t}</button>
-        ))}
-      </div>
-      <div className="flex flex-col gap-2">
-        <div><label className="label">Date</label>
-          <input type="date" className="input" value={date} onChange={e => setDate(e.target.value)} min={new Date().toISOString().split('T')[0]} /></div>
-        <div><label className="label">Time slot</label>
-          <select className="select" value={slot} onChange={e => setSlot(e.target.value)}>
-            <option value="">Select slot</option>
-            {TIME_SLOTS.map(s => <option key={s} value={s}>{s}</option>)}
-          </select></div>
-        <button onClick={handleSave} disabled={!date || !slot || saving} className="btn-primary justify-center disabled:opacity-50">
-          {saving ? 'Saving...' : `Schedule ${type}`}
-        </button>
-      </div>
-    </div>
   )
 }
 

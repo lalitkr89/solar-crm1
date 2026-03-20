@@ -42,12 +42,12 @@ const COLS = [
 
   // Group 1 — Sales
   { key: 'sales_name', label: 'Sales Agent', w: 100, sortable: true, g: 1 },
-  { key: 'meeting_date', label: 'Meeting Date', w: 110, sortable: true, g: 1 },
+  { key: 'meeting_date', label: 'Meeting Date', w: 110, sortable: true, g: 1, isDate: true },
   { key: 'meeting_slot', label: 'Slot', w: 130, sortable: true, g: 1 },
   { key: 'sales_meeting_status', label: 'Mtg Status', w: 120, sortable: true, g: 1 },
   { key: 'sales_outcome', label: 'Outcome', w: 200, sortable: true, g: 1 },
   { key: 'sales_lead_status', label: 'Lead Status', w: 100, sortable: true, g: 1 },
-  { key: 'sales_followup_date', label: 'Follow Up', w: 100, sortable: true, g: 1 },
+  { key: 'sales_followup_date', label: 'Follow Up', w: 100, sortable: true, g: 1, isDate: true },
   { key: 'sales_quoted_amount', label: 'Quoted ₹', w: 100, sortable: true, g: 1 },
 
   // Group 2 — Property Details
@@ -147,6 +147,17 @@ function getMtgStatusLabel(status) {
 
 function applyFilter(cellVal, f) {
   if (!f) return true
+
+  // Date range filter
+  if (f.isDate) {
+    if (!f.from && !f.to) return true
+    if (!cellVal) return false
+    if (f.from && f.to) return cellVal >= f.from && cellVal <= f.to
+    if (f.from) return cellVal >= f.from
+    if (f.to) return cellVal <= f.to
+    return true
+  }
+
   const hasVal1 = f.val?.trim() || f.op === 'blank' || f.op === 'not_blank'
   const hasVal2 = f.val2?.trim() || f.op2 === 'blank' || f.op2 === 'not_blank'
   if (!hasVal1) return true
@@ -619,6 +630,8 @@ function ColFilterPopup({ col, value, onApply, onClear, onClose }) {
   const [op2, setOp2] = useState(value?.op2 ?? 'contains')
   const [val2, setVal2] = useState(value?.val2 ?? '')
   const [join, setJoin] = useState(value?.join ?? 'AND')
+  const [fromDate, setFromDate] = useState(value?.from ?? '')
+  const [toDate, setToDate] = useState(value?.to ?? '')
   const noInput = o => o === 'blank' || o === 'not_blank'
 
   useEffect(() => {
@@ -626,6 +639,39 @@ function ColFilterPopup({ col, value, onApply, onClear, onClose }) {
     document.addEventListener('mousedown', handle)
     return () => document.removeEventListener('mousedown', handle)
   }, [])
+
+  // Date column — show calendar UI
+  if (col.isDate) {
+    return (
+      <div data-fp
+        className="absolute top-full right-0 z-50 bg-white border border-slate-200 rounded-xl shadow-xl p-3 min-w-[220px] mt-1"
+        onClick={e => e.stopPropagation()}>
+        <div className="text-xs font-semibold text-slate-600 mb-3">{col.label} filter</div>
+        <div className="flex flex-col gap-2 mb-3">
+          <div>
+            <label className="text-xs text-slate-500 mb-1 block">From</label>
+            <input type="date" autoFocus
+              className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400"
+              value={fromDate} onChange={e => setFromDate(e.target.value)} />
+          </div>
+          <div>
+            <label className="text-xs text-slate-500 mb-1 block">To</label>
+            <input type="date"
+              className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400"
+              value={toDate} onChange={e => setToDate(e.target.value)} />
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={onClear} className="flex-1 py-1.5 text-xs font-medium border border-slate-200 rounded-lg hover:bg-slate-50">Clear</button>
+          <button onClick={() => onApply({ isDate: true, from: fromDate, to: toDate })}
+            disabled={!fromDate && !toDate}
+            className="flex-1 py-1.5 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40">
+            Apply
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div data-fp

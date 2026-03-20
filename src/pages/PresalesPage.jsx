@@ -12,16 +12,17 @@ import { Plus, RefreshCw, Search, X, Filter, Phone, PhoneOff } from 'lucide-reac
 
 // ── Column definitions ────────────────────────────────────────
 const COLS = [
+  { key: '_select', label: '', w: 36, sortable: false, g: 0 },
   { key: 'name', label: 'Name / Phone', w: 180, sortable: true, g: 0 },
   { key: 'city', label: 'City', w: 90, sortable: true, g: 0 },
   { key: 'lead_source', label: 'Source', w: 110, sortable: true, g: 0 },
   { key: 'assigned_name', label: 'PS agent', w: 90, sortable: true, g: 1 },
   { key: 'call_status', label: 'Status', w: 100, sortable: true, g: 1 },
   { key: 'disposition', label: 'Disposition', w: 210, sortable: true, g: 1 },
-  { key: 'calling_date', label: 'Called date', w: 90, sortable: true, g: 1 },
-  { key: 'callback_date', label: 'Callback', w: 100, sortable: true, g: 1 },
+  { key: 'calling_date', label: 'Called date', w: 90, sortable: true, g: 1, isDate: true },
+  { key: 'callback_date', label: 'Callback', w: 100, sortable: true, g: 1, isDate: true },
   { key: 'sales_outcome', label: 'Sales outcome', w: 140, sortable: true, g: 2 },
-  { key: 'meeting_date', label: 'Meeting date', w: 105, sortable: true, g: 2 },
+  { key: 'meeting_date', label: 'Meeting date', w: 105, sortable: true, g: 2, isDate: true },
   { key: 'sales_agent_name', label: 'Sales agent', w: 100, sortable: true, g: 2 },
 ]
 
@@ -97,6 +98,17 @@ export function stopCallingMode() {
 
 function applyFilter(cellVal, f) {
   if (!f) return true
+
+  // Date range filter
+  if (f.isDate) {
+    if (!f.from && !f.to) return true
+    if (!cellVal) return false
+    if (f.from && f.to) return cellVal >= f.from && cellVal <= f.to
+    if (f.from) return cellVal >= f.from
+    if (f.to) return cellVal <= f.to
+    return true
+  }
+
   const hasVal1 = f.val?.trim() || f.op === 'blank' || f.op === 'not_blank'
   const hasVal2 = f.val2?.trim() || f.op2 === 'blank' || f.op2 === 'not_blank'
   if (!hasVal1) return true
@@ -134,6 +146,8 @@ export default function PresalesPage() {
   const [sortDir, setSortDir] = useState('asc')
   const [callingMode, setCallingMode] = useState(() => isCallingModeActive())
   const [queueLoading, setQueueLoading] = useState(false)
+  const [selectedIds, setSelectedIds] = useState(new Set())
+  const [showBulkEdit, setShowBulkEdit] = useState(false)
 
   const today = format(new Date(), 'yyyy-MM-dd')
 
@@ -218,8 +232,25 @@ export default function PresalesPage() {
   }
 
   const activeFilters = Object.keys(filters).length
-  const G_SPANS = G_LABELS.map((_, i) => COLS.filter(c => c.g === i).length)
-  const totalW = COLS.reduce((s, c) => s + c.w, 0)
+  const visibleCols = COLS.filter(c => c.key !== '_select' || isManager || isSuperAdmin)
+  const G_SPANS = G_LABELS.map((_, i) => visibleCols.filter(c => c.g === i).length)
+  const totalW = visibleCols.reduce((s, c) => s + c.w, 0)
+
+  function toggleSelect(id) {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
+  function toggleSelectAll() {
+    if (selectedIds.size === sorted.length) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(sorted.map(l => l.id)))
+    }
+  }
 
   return (
     <Layout>
@@ -289,6 +320,22 @@ export default function PresalesPage() {
         <span className="text-xs text-slate-400 ml-auto">{sorted.length} results</span>
       </div>
 
+      {/* Bulk action bar */}
+      {(isManager || isSuperAdmin) && selectedIds.size > 0 && (
+        <div className="mb-3 px-4 py-2.5 rounded-xl flex items-center gap-3"
+          style={{ background: '#eff6ff', border: '1px solid #bfdbfe' }}>
+          <span className="text-sm font-semibold text-blue-800">{selectedIds.size} lead{selectedIds.size > 1 ? 's' : ''} selected</span>
+          <button onClick={() => setShowBulkEdit(true)}
+            className="ml-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-600 text-white hover:bg-blue-700">
+            Bulk Edit
+          </button>
+          <button onClick={() => setSelectedIds(new Set())}
+            className="ml-auto text-xs text-blue-500 hover:text-blue-700">
+            Clear selection
+          </button>
+        </div>
+      )}
+
       {/* Table */}
       <div className="card p-0 rounded-xl border border-slate-200" style={{ overflowX: 'auto' }}>
         <div style={{ overflowY: 'auto', maxHeight: 'calc(100vh - 230px)' }}>
@@ -304,24 +351,32 @@ export default function PresalesPage() {
                 ))}
               </tr>
               <tr className="bg-slate-50 border-b border-slate-200">
-                {COLS.map(col => (
+                {visibleCols.map(col => (
                   <th key={col.key}
                     style={{ width: col.w, minWidth: col.w, borderTop: `2px solid ${G_COLORS[col.g]}` }}
                     className="px-3 py-2 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap relative group bg-slate-50">
-                    <div className="flex items-center gap-1">
-                      <span className={col.sortable ? 'cursor-pointer hover:text-slate-800 select-none' : ''}
-                        onClick={() => col.sortable && toggleSort(col.key)}>
-                        {col.label}
-                        {sortCol === col.key && (
-                          <span style={{ color: G_COLORS[col.g] }}>{sortDir === 'asc' ? ' ↑' : ' ↓'}</span>
-                        )}
-                      </span>
-                      <button onClick={() => setFilterOpen(filterOpen === col.key ? null : col.key)}
-                        className={`ml-auto p-0.5 rounded flex-shrink-0 transition-colors ${filters[col.key] ? 'text-blue-500' : 'text-slate-300 hover:text-slate-500 opacity-0 group-hover:opacity-100'
-                          }`}>
-                        <Filter size={10} />
-                      </button>
-                    </div>
+                    {col.key === '_select' ? (
+                      (isManager || isSuperAdmin) ? (
+                        <input type="checkbox"
+                          checked={sorted.length > 0 && selectedIds.size === sorted.length}
+                          onChange={toggleSelectAll}
+                          className="w-3.5 h-3.5 rounded cursor-pointer" />
+                      ) : null
+                    ) : (
+                      <div className="flex items-center gap-1">
+                        <span className={col.sortable ? 'cursor-pointer hover:text-slate-800 select-none' : ''}
+                          onClick={() => col.sortable && toggleSort(col.key)}>
+                          {col.label}
+                          {sortCol === col.key && (
+                            <span style={{ color: G_COLORS[col.g] }}>{sortDir === 'asc' ? ' ↑' : ' ↓'}</span>
+                          )}
+                        </span>
+                        <button onClick={() => setFilterOpen(filterOpen === col.key ? null : col.key)}
+                          className={`ml-auto p-0.5 rounded flex-shrink-0 transition-colors ${filters[col.key] ? 'text-blue-500' : 'text-slate-300 hover:text-slate-500 opacity-0 group-hover:opacity-100'}`}>
+                          <Filter size={10} />
+                        </button>
+                      </div>
+                    )}
                     {filterOpen === col.key && (
                       <ColFilterPopup col={col}
                         value={filters[col.key]}
@@ -340,8 +395,19 @@ export default function PresalesPage() {
                 <tr><td colSpan={COLS.length} className="py-16 text-center text-sm text-slate-400">No leads found</td></tr>
               ) : sorted.map(lead => (
                 <tr key={lead.id}
-                  className="border-b border-slate-100 hover:bg-slate-50 cursor-pointer"
+                  className={`border-b border-slate-100 hover:bg-slate-50 cursor-pointer ${selectedIds.has(lead.id) ? 'bg-blue-50/40' : ''}`}
                   onClick={() => navigate(`/leads/${lead.id}`)}>
+
+                  {/* Checkbox */}
+                  {(isManager || isSuperAdmin) && (
+                    <td className="px-3 py-2.5" style={{ width: 36, minWidth: 36 }}
+                      onClick={e => { e.stopPropagation(); toggleSelect(lead.id) }}>
+                      <input type="checkbox"
+                        checked={selectedIds.has(lead.id)}
+                        onChange={() => toggleSelect(lead.id)}
+                        className="w-3.5 h-3.5 rounded cursor-pointer" />
+                    </td>
+                  )}
 
                   {/* Lead info */}
                   <td className="px-3 py-2.5" style={{ width: 180, minWidth: 180 }}>
@@ -427,7 +493,176 @@ export default function PresalesPage() {
         agentId={profile?.id}
         isManager={isManager || isSuperAdmin}
       />
+
+      <BulkEditModal
+        open={showBulkEdit}
+        onClose={() => setShowBulkEdit(false)}
+        selectedIds={[...selectedIds]}
+        onDone={() => {
+          setShowBulkEdit(false)
+          setSelectedIds(new Set())
+          load()
+        }}
+      />
     </Layout>
+  )
+}
+
+
+// ── Bulk Edit Modal ───────────────────────────────────────────
+function BulkEditModal({ open, onClose, selectedIds, onDone }) {
+  const [agents, setAgents] = useState([])
+  const [saving, setSaving] = useState(false)
+  const [form, setForm] = useState({
+    presales_agent_id: '',
+    calling_date: '',
+    callback_date: '',
+    callback_slot: '',
+    disposition: '',
+    stage: '',
+  })
+
+  useEffect(() => {
+    if (open) {
+      supabase.from('users').select('id, name')
+        .eq('role', 'presales_agent').eq('is_active', true).order('name')
+        .then(({ data }) => setAgents(data ?? []))
+      setForm({ presales_agent_id: '', calling_date: '', callback_date: '', callback_slot: '', disposition: '', stage: '' })
+    }
+  }, [open])
+
+  function set(f, v) { setForm(p => ({ ...p, [f]: v })) }
+
+  async function handleSave() {
+    setSaving(true)
+    // Sirf filled fields update karo
+    const updates = {}
+    if (form.presales_agent_id) {
+      updates.presales_agent_id = form.presales_agent_id
+      updates.assigned_to = form.presales_agent_id
+    }
+    if (form.calling_date) updates.calling_date = form.calling_date
+    if (form.callback_date) updates.callback_date = form.callback_date
+    if (form.callback_slot) updates.callback_slot = form.callback_slot
+    if (form.disposition) updates.disposition = form.disposition
+    if (form.stage) updates.stage = form.stage
+
+    if (Object.keys(updates).length === 0) {
+      alert('Koi bhi field fill nahi ki!')
+      setSaving(false)
+      return
+    }
+
+    // Batch update — sab selected leads pe
+    const { error } = await supabase
+      .from('leads')
+      .update(updates)
+      .in('id', selectedIds)
+
+    if (error) {
+      alert('Error: ' + error.message)
+    } else {
+      onDone()
+    }
+    setSaving(false)
+  }
+
+  const NOT_CONNECTED_DISPOSITIONS = [
+    'Not Connected 1st-Attempt', 'Not Connected 2nd-Attempt',
+    'Not Connected 3rd-Attempt', 'Not Connected 4th-Attempt', 'Invalid/Wrong Number',
+  ]
+  const CONNECTED_DISPOSITIONS = [
+    'Meeting Scheduled (BD)', 'Meet Later (Qualified)', 'Call Later (Interested)',
+    'Call Later (Under Construction)', 'Language Barrier',
+    'Non Qualified - Roof Area Insufficient', 'Non Qualified - Bill Amount Insufficient',
+    'Non Qualified - No Roof Ownership', 'Non Qualified - Not Govt Meter',
+    'Non Qualified - Meter Connection Not Yet Available',
+    'Not Serviceable - Offgrid Enquiry', 'Not Serviceable - SS not in location',
+    'Not Interested in Solar', 'Not Interested in Solar - Price Issue',
+    'Housing Society Enquiry', 'Commercial Lead', 'SolarPro Enquiry',
+  ]
+  const ALL_DISPOSITIONS = [...NOT_CONNECTED_DISPOSITIONS, ...CONNECTED_DISPOSITIONS]
+
+  const STAGES = [
+    { value: 'new', label: 'New' },
+    { value: 'meeting_scheduled', label: 'Meeting Scheduled' },
+    { value: 'qc_followup', label: 'QC Follow Up' },
+    { value: 'not_interested', label: 'Not Interested' },
+    { value: 'non_qualified', label: 'Non Qualified' },
+    { value: 'lost', label: 'Lost' },
+  ]
+
+  const TIME_SLOTS = [
+    '9:00 AM - 10:00 AM', '10:00 AM - 11:00 AM', '11:00 AM - 12:00 PM',
+    '12:00 PM - 1:00 PM', '1:00 PM - 2:00 PM', '2:00 PM - 3:00 PM',
+    '3:00 PM - 4:00 PM', '4:00 PM - 5:00 PM', '5:00 PM - 6:00 PM', '6:00 PM - 7:00 PM',
+  ]
+
+  return (
+    <Modal open={open} onClose={onClose} title={`Bulk edit — ${selectedIds.length} leads`} width={500}>
+      <p className="text-xs text-slate-500 mb-4">
+        Sirf jo fields fill karoge wahi update hongi. Baaki fields unchanged rahenge.
+      </p>
+      <div className="flex flex-col gap-4">
+
+        <div>
+          <label className="label">Presales agent change karo</label>
+          <select className="select" value={form.presales_agent_id} onChange={e => set('presales_agent_id', e.target.value)}>
+            <option value="">— No change —</option>
+            {agents.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+          </select>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="label">Calling date</label>
+            <input type="date" className="input"
+              value={form.calling_date} onChange={e => set('calling_date', e.target.value)} />
+          </div>
+          <div>
+            <label className="label">Callback date</label>
+            <input type="date" className="input"
+              value={form.callback_date} onChange={e => set('callback_date', e.target.value)} />
+          </div>
+          <div>
+            <label className="label">Callback slot</label>
+            <select className="select" value={form.callback_slot} onChange={e => set('callback_slot', e.target.value)}>
+              <option value="">— No change —</option>
+              {TIME_SLOTS.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="label">Stage</label>
+            <select className="select" value={form.stage} onChange={e => set('stage', e.target.value)}>
+              <option value="">— No change —</option>
+              {STAGES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label className="label">Disposition</label>
+          <select className="select" value={form.disposition} onChange={e => set('disposition', e.target.value)}>
+            <option value="">— No change —</option>
+            <optgroup label="Not Connected">
+              {NOT_CONNECTED_DISPOSITIONS.map(d => <option key={d} value={d}>{d}</option>)}
+            </optgroup>
+            <optgroup label="Connected">
+              {CONNECTED_DISPOSITIONS.map(d => <option key={d} value={d}>{d}</option>)}
+            </optgroup>
+          </select>
+        </div>
+
+      </div>
+
+      <div className="flex gap-2 mt-5 pt-4 border-t border-slate-100">
+        <button onClick={onClose} className="btn flex-1 justify-center">Cancel</button>
+        <button onClick={handleSave} disabled={saving}
+          className="btn-primary flex-1 justify-center disabled:opacity-50">
+          {saving ? 'Saving...' : `Update ${selectedIds.length} leads`}
+        </button>
+      </div>
+    </Modal>
   )
 }
 
@@ -438,6 +673,8 @@ function ColFilterPopup({ col, value, onApply, onClear, onClose }) {
   const [op2, setOp2] = useState(value?.op2 ?? 'contains')
   const [val2, setVal2] = useState(value?.val2 ?? '')
   const [join, setJoin] = useState(value?.join ?? 'AND')
+  const [fromDate, setFromDate] = useState(value?.from ?? '')
+  const [toDate, setToDate] = useState(value?.to ?? '')
   const noInput = o => o === 'blank' || o === 'not_blank'
 
   useEffect(() => {
@@ -445,6 +682,39 @@ function ColFilterPopup({ col, value, onApply, onClear, onClose }) {
     document.addEventListener('mousedown', handle)
     return () => document.removeEventListener('mousedown', handle)
   }, [])
+
+  // Date column — calendar UI
+  if (col.isDate) {
+    return (
+      <div data-fp
+        className="absolute top-full right-0 z-50 bg-white border border-slate-200 rounded-xl shadow-xl p-3 min-w-[220px] mt-1"
+        onClick={e => e.stopPropagation()}>
+        <div className="text-xs font-semibold text-slate-600 mb-3">{col.label} filter</div>
+        <div className="flex flex-col gap-2 mb-3">
+          <div>
+            <label className="text-xs text-slate-500 mb-1 block">From</label>
+            <input type="date" autoFocus
+              className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400"
+              value={fromDate} onChange={e => setFromDate(e.target.value)} />
+          </div>
+          <div>
+            <label className="text-xs text-slate-500 mb-1 block">To</label>
+            <input type="date"
+              className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400"
+              value={toDate} onChange={e => setToDate(e.target.value)} />
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={onClear} className="flex-1 py-1.5 text-xs font-medium border border-slate-200 rounded-lg hover:bg-slate-50">Clear</button>
+          <button onClick={() => onApply({ isDate: true, from: fromDate, to: toDate })}
+            disabled={!fromDate && !toDate}
+            className="flex-1 py-1.5 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40">
+            Apply
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div data-fp className="absolute top-full right-0 z-50 bg-white border border-slate-200 rounded-xl shadow-xl p-3 min-w-[240px] mt-1"
