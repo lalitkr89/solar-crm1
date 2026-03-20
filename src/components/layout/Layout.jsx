@@ -4,7 +4,10 @@ export default function Layout({ children }) {
   return (
     <div className="flex min-h-screen bg-slate-50">
       <Sidebar />
-      <main className="main-content flex-1 p-6 min-w-0 overflow-x-hidden">
+      {/* Desktop: margin for sidebar. Mobile: no margin, full width */}
+      <main className="flex-1 min-w-0 overflow-x-hidden
+        p-3 pt-14
+        lg:p-6 lg:pt-6 lg:ml-[var(--sidebar-w)]">
         {children}
       </main>
     </div>
