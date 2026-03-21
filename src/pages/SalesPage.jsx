@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
 import Layout from '@/components/layout/Layout'
-import { PageHeader, Spinner } from '@/components/ui'
+import { PageHeader, Spinner, Modal } from '@/components/ui'
 import { supabase } from '@/lib/supabase'
 import { formatPhone, cleanPhone } from '@/lib/phone'
 import { getSalesCallingQueue, getSalesFollowUpQueue, assignSalesLeadIfUnassigned } from '@/lib/assignment'
@@ -34,6 +34,7 @@ export function stopSalesCallingMode() {
 
 // ── Column definitions ────────────────────────────────────────
 const COLS = [
+  { key: '_select', label: '', w: 36, sortable: false, g: 0 },
   // Group 0 — Lead Info
   { key: 'name', label: 'Name / Phone', w: 180, sortable: true, g: 0 },
   { key: 'city', label: 'City', w: 90, sortable: true, g: 0 },
@@ -195,6 +196,8 @@ export default function SalesPage() {
   const [callingMode, setCallingMode] = useState(() => isSalesCallingModeActive())
   const [callingType, setCallingType] = useState(() => getSalesCallingModeType())
   const [queueLoading, setQueueLoading] = useState(false)
+  const [selectedIds, setSelectedIds] = useState(new Set())
+  const [showBulkEdit, setShowBulkEdit] = useState(false)
   const today = format(new Date(), 'yyyy-MM-dd')
 
   async function load() {
@@ -312,8 +315,25 @@ export default function SalesPage() {
   }
 
   const activeFilters = Object.keys(filters).length
-  const G_SPANS = G_LABELS.map((_, i) => COLS.filter(c => c.g === i).length)
-  const totalW = COLS.reduce((s, c) => s + c.w, 0)
+  const visibleCols = COLS.filter(c => c.key !== '_select' || isManager || isSuperAdmin)
+  const G_SPANS = G_LABELS.map((_, i) => visibleCols.filter(c => c.g === i).length)
+  const totalW = visibleCols.reduce((s, c) => s + c.w, 0)
+
+  function toggleSelect(id) {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
+  function toggleSelectAll() {
+    if (selectedIds.size === sorted.length) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(sorted.map(l => l.id)))
+    }
+  }
 
   // Quick stats
   const todayMtg = leads.filter(l => l.meeting_date === today).length
@@ -437,6 +457,22 @@ export default function SalesPage() {
         <span className="text-xs text-slate-400 ml-auto">{sorted.length} results</span>
       </div>
 
+      {/* Bulk action bar */}
+      {(isManager || isSuperAdmin) && selectedIds.size > 0 && (
+        <div className="mb-3 px-4 py-2.5 rounded-xl flex items-center gap-3"
+          style={{ background: '#eff6ff', border: '1px solid #bfdbfe' }}>
+          <span className="text-sm font-semibold text-blue-800">{selectedIds.size} lead{selectedIds.size > 1 ? 's' : ''} selected</span>
+          <button onClick={() => setShowBulkEdit(true)}
+            className="ml-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-600 text-white hover:bg-blue-700">
+            Bulk Edit
+          </button>
+          <button onClick={() => setSelectedIds(new Set())}
+            className="ml-auto text-xs text-blue-500 hover:text-blue-700">
+            Clear selection
+          </button>
+        </div>
+      )}
+
       {/* Table */}
       <div className="card p-0 rounded-xl border border-slate-200" style={{ overflowX: 'auto' }}>
         <div style={{ overflowY: 'auto', maxHeight: 'calc(100vh - 280px)' }}>
@@ -454,24 +490,32 @@ export default function SalesPage() {
               </tr>
               {/* Column headers */}
               <tr className="bg-slate-50 border-b border-slate-200">
-                {COLS.map(col => (
+                {visibleCols.map(col => (
                   <th key={col.key}
                     style={{ width: col.w, minWidth: col.w, borderTop: `2px solid ${G_COLORS[col.g]}` }}
                     className="px-3 py-2 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap relative group bg-slate-50">
-                    <div className="flex items-center gap-1">
-                      <span className={col.sortable ? 'cursor-pointer hover:text-slate-800 select-none' : ''}
-                        onClick={() => col.sortable && toggleSort(col.key)}>
-                        {col.label}
-                        {sortCol === col.key && (
-                          <span style={{ color: G_COLORS[col.g] }}>{sortDir === 'asc' ? ' ↑' : ' ↓'}</span>
-                        )}
-                      </span>
-                      <button onClick={() => setFilterOpen(filterOpen === col.key ? null : col.key)}
-                        className={`ml-auto p-0.5 rounded flex-shrink-0 transition-colors ${filters[col.key] ? 'text-blue-500' : 'text-slate-300 hover:text-slate-500 opacity-0 group-hover:opacity-100'
-                          }`}>
-                        <Filter size={10} />
-                      </button>
-                    </div>
+                    {col.key === '_select' ? (
+                      (isManager || isSuperAdmin) ? (
+                        <input type="checkbox"
+                          checked={sorted.length > 0 && selectedIds.size === sorted.length}
+                          onChange={toggleSelectAll}
+                          className="w-3.5 h-3.5 rounded cursor-pointer accent-blue-600" />
+                      ) : null
+                    ) : (
+                      <div className="flex items-center gap-1">
+                        <span className={col.sortable ? 'cursor-pointer hover:text-slate-800 select-none' : ''}
+                          onClick={() => col.sortable && toggleSort(col.key)}>
+                          {col.label}
+                          {sortCol === col.key && (
+                            <span style={{ color: G_COLORS[col.g] }}>{sortDir === 'asc' ? ' ↑' : ' ↓'}</span>
+                          )}
+                        </span>
+                        <button onClick={() => setFilterOpen(filterOpen === col.key ? null : col.key)}
+                          className={`ml-auto p-0.5 rounded flex-shrink-0 transition-colors ${filters[col.key] ? 'text-blue-500' : 'text-slate-300 hover:text-slate-500 opacity-0 group-hover:opacity-100'}`}>
+                          <Filter size={10} />
+                        </button>
+                      </div>
+                    )}
                     {filterOpen === col.key && (
                       <ColFilterPopup col={col}
                         value={filters[col.key]}
@@ -486,9 +530,9 @@ export default function SalesPage() {
 
             <tbody>
               {loading ? (
-                <tr><td colSpan={COLS.length} className="py-16 text-center"><Spinner size={20} /></td></tr>
+                <tr><td colSpan={visibleCols.length} className="py-16 text-center"><Spinner size={20} /></td></tr>
               ) : sorted.length === 0 ? (
-                <tr><td colSpan={COLS.length} className="py-16 text-center text-sm text-slate-400">No leads found</td></tr>
+                <tr><td colSpan={visibleCols.length} className="py-16 text-center text-sm text-slate-400">No leads found</td></tr>
               ) : sorted.map(lead => {
                 const isToday = lead.meeting_date === today
                 const isPast = lead.meeting_date < today
@@ -498,9 +542,20 @@ export default function SalesPage() {
 
                 return (
                   <tr key={lead.id}
-                    className={`border-b border-slate-100 hover:bg-slate-50 cursor-pointer ${isToday ? 'bg-blue-50/30' : isPast && !lead.sales_outcome ? 'bg-amber-50/30' : ''
-                      }`}
+                    className={`border-b border-slate-100 hover:bg-slate-50 cursor-pointer ${selectedIds.has(lead.id) ? 'bg-blue-50/40' : isToday ? 'bg-blue-50/30' : isPast && !lead.sales_outcome ? 'bg-amber-50/30' : ''}`}
                     onClick={() => navigate(`/leads/${lead.id}`)}>
+
+                    {/* Checkbox */}
+                    {(isManager || isSuperAdmin) && (
+                      <td className="px-3 py-2.5" style={{ width: 36, minWidth: 36 }}
+                        onClick={e => e.stopPropagation()}>
+                        <input type="checkbox"
+                          checked={selectedIds.has(lead.id)}
+                          onClick={e => e.stopPropagation()}
+                          onChange={e => { e.stopPropagation(); toggleSelect(lead.id) }}
+                          className="w-3.5 h-3.5 rounded cursor-pointer accent-blue-600" />
+                      </td>
+                    )}
 
                     {/* g:0 Lead Info */}
                     <td className="px-3 py-2.5" style={{ width: 180, minWidth: 180 }}>
@@ -619,7 +674,153 @@ export default function SalesPage() {
           </table>
         </div>
       </div>
+      <SalesBulkEditModal
+        open={showBulkEdit}
+        onClose={() => setShowBulkEdit(false)}
+        selectedIds={[...selectedIds]}
+        onDone={() => {
+          setShowBulkEdit(false)
+          setSelectedIds(new Set())
+          load()
+        }}
+      />
     </Layout>
+  )
+}
+
+// ── Sales Bulk Edit Modal ─────────────────────────────────────
+function SalesBulkEditModal({ open, onClose, selectedIds, onDone }) {
+  const [agents, setAgents] = useState([])
+  const [saving, setSaving] = useState(false)
+  const [form, setForm] = useState({
+    sales_agent_id: '',
+    meeting_date: '',
+    meeting_slot: '',
+    sales_outcome: '',
+    sales_lead_status: '',
+    sales_followup_date: '',
+    sales_followup_slot: '',
+  })
+
+  const TIME_SLOTS = [
+    '9:00 AM - 10:00 AM', '10:00 AM - 11:00 AM', '11:00 AM - 12:00 PM',
+    '12:00 PM - 1:00 PM', '1:00 PM - 2:00 PM', '2:00 PM - 3:00 PM',
+    '3:00 PM - 4:00 PM', '4:00 PM - 5:00 PM', '5:00 PM - 6:00 PM', '6:00 PM - 7:00 PM',
+  ]
+
+  const OUTCOMES = [
+    { value: 'call_not_connected_1', label: 'Not Connected - 1st' },
+    { value: 'call_not_connected_2', label: 'Not Connected - 2nd' },
+    { value: 'call_not_connected_3', label: 'Not Connected - 3rd' },
+    { value: 'call_later_interested', label: 'Call Later (Interested)' },
+    { value: 'call_later_underconstruction', label: 'Call Later (UC)' },
+    { value: 'meeting_rescheduled', label: 'Meeting Rescheduled' },
+    { value: 'meeting_done_hot', label: 'HOT 🔥' },
+    { value: 'meeting_done_moderate', label: 'MODERATE 🌡️' },
+    { value: 'meeting_done_cold', label: 'COLD ❄️' },
+    { value: 'meeting_done_order_closed', label: 'ORDER CLOSED 🎉' },
+    { value: 'not_interested', label: 'Not Interested' },
+    { value: 'non_qualified_roof', label: 'NQ - Roof' },
+    { value: 'non_qualified_bill', label: 'NQ - Bill' },
+  ]
+
+  useEffect(() => {
+    if (open) {
+      supabase.from('users').select('id, name')
+        .eq('role', 'sales_agent').eq('is_active', true).order('name')
+        .then(({ data }) => setAgents(data ?? []))
+      setForm({ sales_agent_id: '', meeting_date: '', meeting_slot: '', sales_outcome: '', sales_lead_status: '', sales_followup_date: '', sales_followup_slot: '' })
+    }
+  }, [open])
+
+  function set(f, v) { setForm(p => ({ ...p, [f]: v })) }
+
+  async function handleSave() {
+    setSaving(true)
+    const updates = {}
+    if (form.sales_agent_id) { updates.sales_agent_id = form.sales_agent_id; updates.assigned_to = form.sales_agent_id }
+    if (form.meeting_date) updates.meeting_date = form.meeting_date
+    if (form.meeting_slot) updates.meeting_slot = form.meeting_slot
+    if (form.sales_outcome) updates.sales_outcome = form.sales_outcome
+    if (form.sales_lead_status) updates.sales_lead_status = form.sales_lead_status
+    if (form.sales_followup_date) updates.sales_followup_date = form.sales_followup_date
+    if (form.sales_followup_slot) updates.sales_followup_slot = form.sales_followup_slot
+
+    if (Object.keys(updates).length === 0) {
+      alert('Koi bhi field fill nahi ki!')
+      setSaving(false)
+      return
+    }
+
+    const { error } = await supabase.from('leads').update(updates).in('id', selectedIds)
+    if (error) { alert('Error: ' + error.message) }
+    else { onDone() }
+    setSaving(false)
+  }
+
+  return (
+    <Modal open={open} onClose={onClose} title={`Bulk edit — ${selectedIds.length} leads`} width={500}>
+      <p className="text-xs text-slate-500 mb-4">
+        Sirf jo fields fill karoge wahi update hongi. Baaki unchanged rahenge.
+      </p>
+      <div className="flex flex-col gap-4">
+        <div>
+          <label className="label">Sales agent change karo</label>
+          <select className="select" value={form.sales_agent_id} onChange={e => set('sales_agent_id', e.target.value)}>
+            <option value="">— No change —</option>
+            {agents.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+          </select>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="label">Meeting date</label>
+            <input type="date" className="input" value={form.meeting_date} onChange={e => set('meeting_date', e.target.value)} />
+          </div>
+          <div>
+            <label className="label">Meeting slot</label>
+            <select className="select" value={form.meeting_slot} onChange={e => set('meeting_slot', e.target.value)}>
+              <option value="">— No change —</option>
+              {TIME_SLOTS.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="label">Follow up date</label>
+            <input type="date" className="input" value={form.sales_followup_date} onChange={e => set('sales_followup_date', e.target.value)} />
+          </div>
+          <div>
+            <label className="label">Follow up slot</label>
+            <select className="select" value={form.sales_followup_slot} onChange={e => set('sales_followup_slot', e.target.value)}>
+              <option value="">— No change —</option>
+              {TIME_SLOTS.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+        </div>
+        <div>
+          <label className="label">Sales outcome</label>
+          <select className="select" value={form.sales_outcome} onChange={e => set('sales_outcome', e.target.value)}>
+            <option value="">— No change —</option>
+            {OUTCOMES.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="label">Lead status</label>
+          <select className="select" value={form.sales_lead_status} onChange={e => set('sales_lead_status', e.target.value)}>
+            <option value="">— No change —</option>
+            <option value="pending">Pending</option>
+            <option value="follow_up">Follow Up</option>
+            <option value="won">Won</option>
+            <option value="lost">Lost</option>
+          </select>
+        </div>
+      </div>
+      <div className="flex gap-2 mt-5 pt-4 border-t border-slate-100">
+        <button onClick={onClose} className="btn flex-1 justify-center">Cancel</button>
+        <button onClick={handleSave} disabled={saving}
+          className="btn-primary flex-1 justify-center disabled:opacity-50">
+          {saving ? 'Saving...' : `Update ${selectedIds.length} leads`}
+        </button>
+      </div>
+    </Modal>
   )
 }
 

@@ -336,152 +336,228 @@ export default function PresalesPage() {
         </div>
       )}
 
-      {/* Table */}
-      <div className="card p-0 rounded-xl border border-slate-200" style={{ overflowX: 'auto' }}>
-        <div style={{ overflowY: 'auto', maxHeight: 'calc(100vh - 230px)' }}>
-          <table style={{ minWidth: totalW, width: '100%', borderCollapse: 'collapse' }}>
-            <thead className="sticky top-0 z-10">
-              <tr>
-                {G_LABELS.map((label, i) => (
-                  <th key={label} colSpan={G_SPANS[i]}
-                    style={{ background: G_COLORS[i] }}
-                    className="px-3 py-1.5 text-center text-xs font-bold text-white tracking-wide border-r-2 border-white/30 last:border-0">
-                    {label}
-                  </th>
-                ))}
-              </tr>
-              <tr className="bg-slate-50 border-b border-slate-200">
-                {visibleCols.map(col => (
-                  <th key={col.key}
-                    style={{ width: col.w, minWidth: col.w, borderTop: `2px solid ${G_COLORS[col.g]}` }}
-                    className="px-3 py-2 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap relative group bg-slate-50">
-                    {col.key === '_select' ? (
-                      (isManager || isSuperAdmin) ? (
-                        <input type="checkbox"
-                          checked={sorted.length > 0 && selectedIds.size === sorted.length}
-                          onChange={toggleSelectAll}
-                          className="w-3.5 h-3.5 rounded cursor-pointer" />
-                      ) : null
-                    ) : (
-                      <div className="flex items-center gap-1">
-                        <span className={col.sortable ? 'cursor-pointer hover:text-slate-800 select-none' : ''}
-                          onClick={() => col.sortable && toggleSort(col.key)}>
-                          {col.label}
-                          {sortCol === col.key && (
-                            <span style={{ color: G_COLORS[col.g] }}>{sortDir === 'asc' ? ' ↑' : ' ↓'}</span>
-                          )}
-                        </span>
-                        <button onClick={() => setFilterOpen(filterOpen === col.key ? null : col.key)}
-                          className={`ml-auto p-0.5 rounded flex-shrink-0 transition-colors ${filters[col.key] ? 'text-blue-500' : 'text-slate-300 hover:text-slate-500 opacity-0 group-hover:opacity-100'}`}>
-                          <Filter size={10} />
-                        </button>
-                      </div>
-                    )}
-                    {filterOpen === col.key && (
-                      <ColFilterPopup col={col}
-                        value={filters[col.key]}
-                        onApply={f => { setFilters(p => ({ ...p, [col.key]: f })); setFilterOpen(null) }}
-                        onClear={() => { setFilters(p => { const n = { ...p }; delete n[col.key]; return n }); setFilterOpen(null) }}
-                        onClose={() => setFilterOpen(null)} />
-                    )}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr><td colSpan={COLS.length} className="py-16 text-center"><Spinner size={20} /></td></tr>
-              ) : sorted.length === 0 ? (
-                <tr><td colSpan={COLS.length} className="py-16 text-center text-sm text-slate-400">No leads found</td></tr>
-              ) : sorted.map(lead => (
-                <tr key={lead.id}
-                  className={`border-b border-slate-100 hover:bg-slate-50 cursor-pointer ${selectedIds.has(lead.id) ? 'bg-blue-50/40' : ''}`}
-                  onClick={() => navigate(`/leads/${lead.id}`)}>
+      {/* Mobile card view */}
+      <div className="block lg:hidden flex flex-col gap-2 pb-4">
+        {loading ? (
+          <div className="flex justify-center py-16"><Spinner size={20} /></div>
+        ) : sorted.length === 0 ? (
+          <div className="text-center py-16 text-sm text-slate-400">No leads found</div>
+        ) : sorted.map(lead => {
+          const borderColor = lead.disposition?.includes('Meeting') ? '#14532d'
+            : lead.disposition?.includes('Not Connected') || lead.disposition?.includes('Invalid') ? '#713f12'
+              : lead.disposition?.includes('Call Later') || lead.disposition?.includes('Meet Later') ? '#1e3a8a'
+                : lead.disposition?.includes('Not Interested') || lead.disposition?.includes('Non Qualified') || lead.disposition?.includes('Not Serviceable') ? '#7f1d1d'
+                  : lead.disposition ? '#475569'
+                    : '#cbd5e1'
 
-                  {/* Checkbox */}
-                  {(isManager || isSuperAdmin) && (
-                    <td className="px-3 py-2.5" style={{ width: 36, minWidth: 36 }}
-                      onClick={e => { e.stopPropagation(); toggleSelect(lead.id) }}>
-                      <input type="checkbox"
-                        checked={selectedIds.has(lead.id)}
-                        onChange={() => toggleSelect(lead.id)}
-                        className="w-3.5 h-3.5 rounded cursor-pointer" />
-                    </td>
+          const avatarBg = lead.disposition?.includes('Meeting') ? { bg: '#dcfce7', text: '#14532d' }
+            : lead.disposition?.includes('Not Connected') || lead.disposition?.includes('Invalid') ? { bg: '#fef9c3', text: '#713f12' }
+              : lead.disposition?.includes('Call Later') || lead.disposition?.includes('Meet Later') ? { bg: '#dbeafe', text: '#1e3a8a' }
+                : lead.disposition?.includes('Not Interested') || lead.disposition?.includes('Non Qualified') ? { bg: '#fee2e2', text: '#7f1d1d' }
+                  : { bg: '#f1f5f9', text: '#64748b' }
+
+          const callbackIsToday = lead.callback_date === today
+          const meetingIsToday = lead.meeting_date === today
+
+          return (
+            <div key={lead.id}
+              className="bg-white rounded-xl border border-slate-200 overflow-hidden cursor-pointer"
+              onClick={() => navigate(`/leads/${lead.id}`)}>
+              <div style={{ borderLeft: `3px solid ${borderColor}`, padding: '11px 13px' }}>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-medium flex-shrink-0"
+                      style={{ background: avatarBg.bg, color: avatarBg.text }}>
+                      {lead.name?.[0]?.toUpperCase() ?? '?'}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-slate-800 truncate">{lead.name ?? '—'}</div>
+                      <div className="text-xs text-slate-400 mt-0.5">{formatPhone(lead.phone)} · {lead.city ?? '—'}</div>
+                    </div>
+                  </div>
+                  {lead.disposition
+                    ? <DispBadge value={lead.disposition} />
+                    : <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200 whitespace-nowrap flex-shrink-0">New lead</span>
+                  }
+                </div>
+                <div className="flex gap-1.5 mt-2 flex-wrap">
+                  {lead.assigned_name && (
+                    <span className="text-xs px-2 py-1 rounded-md bg-slate-50 text-slate-500">
+                      {lead.assigned_name.split(' ')[0]}{lead.lead_source ? ` · ${lead.lead_source}` : ''}
+                    </span>
                   )}
+                  {lead.callback_date && (
+                    <span className={`text-xs px-2 py-1 rounded-md font-medium ${callbackIsToday ? 'bg-amber-50 text-amber-700' : 'bg-slate-50 text-slate-500'}`}>
+                      CB: {callbackIsToday ? 'Today' : format(new Date(lead.callback_date), 'd MMM')}
+                      {lead.callback_slot ? ` · ${lead.callback_slot.split(' ')[0]}` : ''}
+                    </span>
+                  )}
+                  {lead.meeting_date && (
+                    <span className={`text-xs px-2 py-1 rounded-md font-medium ${meetingIsToday ? 'bg-blue-50 text-blue-700' : 'bg-slate-50 text-slate-500'}`}>
+                      Mtg: {meetingIsToday ? 'Today' : format(new Date(lead.meeting_date), 'd MMM')}
+                    </span>
+                  )}
+                  {lead.sales_outcome && (
+                    <span className="text-xs px-2 py-1 rounded-md bg-purple-50 text-purple-700">
+                      {SALES_OUTCOME_LABELS[lead.sales_outcome] ?? lead.sales_outcome}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
 
-                  {/* Lead info */}
-                  <td className="px-3 py-2.5" style={{ width: 180, minWidth: 180 }}>
-                    <div className="font-medium text-slate-800 text-sm truncate">{lead.name ?? '—'}</div>
-                    <div className="text-xs text-slate-400">{formatPhone(lead.phone)}</div>
-                  </td>
-                  <td className="px-3 py-2.5" style={{ width: 90, minWidth: 90 }}>
-                    <span className="text-xs text-slate-600">{lead.city ?? '—'}</span>
-                  </td>
-                  <td className="px-3 py-2.5" style={{ width: 110, minWidth: 110 }}>
-                    <span className="text-xs text-slate-500 truncate block">{lead.lead_source ?? '—'}</span>
-                  </td>
-
-                  {/* Pre-sales */}
-                  <td className="px-3 py-2.5" style={{ width: 90, minWidth: 90 }}>
-                    <span className="text-xs text-slate-500">{lead.assigned_name?.split(' ')[0] ?? '—'}</span>
-                  </td>
-                  <td className="px-3 py-2.5" style={{ width: 100, minWidth: 100 }}>
-                    {lead.call_status ? (
-                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${lead.call_status === 'Connected'
-                        ? 'bg-green-50 text-green-700 border-green-200'
-                        : 'bg-red-50 text-red-600 border-red-200'
-                        }`}>{lead.call_status === 'Connected' ? 'Connected' : 'Not conn.'}</span>
-                    ) : <span className="text-slate-300 text-xs">—</span>}
-                  </td>
-                  <td className="px-3 py-2.5" style={{ width: 210, minWidth: 210 }}>
-                    {lead.disposition ? <DispBadge value={lead.disposition} /> : <span className="text-slate-300 text-xs">—</span>}
-                  </td>
-                  <td className="px-3 py-2.5" style={{ width: 90, minWidth: 90 }}>
-                    {lead.calling_date
-                      ? <div className="text-xs font-medium text-slate-600">{format(new Date(lead.calling_date), 'd MMM')}</div>
-                      : <span className="text-slate-300 text-xs">—</span>}
-                  </td>
-                  <td className="px-3 py-2.5" style={{ width: 100, minWidth: 100 }}>
-                    {lead.callback_date ? (
-                      <div>
-                        <span className={`text-xs font-medium ${lead.callback_date === today ? 'text-amber-600' : 'text-slate-500'}`}>
-                          {lead.callback_date === today ? 'Today' : format(new Date(lead.callback_date), 'd MMM')}
-                        </span>
-                        {lead.callback_slot && <div className="text-xs text-slate-400">{lead.callback_slot.split(' ')[0]}</div>}
-                      </div>
-                    ) : <span className="text-slate-300 text-xs">—</span>}
-                  </td>
-
-                  {/* Sales */}
-                  <td className="px-3 py-2.5" style={{ width: 140, minWidth: 140 }}>
-                    {lead.sales_outcome ? (
-                      <span className="text-xs font-medium px-2 py-0.5 rounded-full border"
-                        style={getSalesOutcomeStyle(lead.sales_outcome)}>
-                        {SALES_OUTCOME_LABELS[lead.sales_outcome] ?? lead.sales_outcome}
-                      </span>
-                    ) : lead.stage === 'meeting_scheduled' ? (
-                      <span className="text-xs text-blue-600 font-medium">Mtg scheduled</span>
-                    ) : (
-                      <span className="text-slate-300 text-xs">—</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2.5" style={{ width: 105, minWidth: 105 }}>
-                    {lead.meeting_date ? (
-                      <div>
-                        <span className={`text-xs font-medium ${lead.meeting_date === today ? 'text-blue-600' : 'text-slate-500'}`}>
-                          {lead.meeting_date === today ? 'Today' : format(new Date(lead.meeting_date), 'd MMM')}
-                        </span>
-                        {lead.meeting_slot && <div className="text-xs text-slate-400">{lead.meeting_slot.split(' ')[0]}</div>}
-                      </div>
-                    ) : <span className="text-slate-300 text-xs">—</span>}
-                  </td>
-                  <td className="px-3 py-2.5" style={{ width: 100, minWidth: 100 }}>
-                    <span className="text-xs text-slate-500">{lead.sales_agent_name || '—'}</span>
-                  </td>
+      {/* Desktop table view */}
+      <div className="hidden lg:block">
+        {/* Table */}
+        <div className="card p-0 rounded-xl border border-slate-200" style={{ overflowX: 'auto' }}>
+          <div style={{ overflowY: 'auto', maxHeight: 'calc(100vh - 230px)' }}>
+            <table style={{ minWidth: totalW, width: '100%', borderCollapse: 'collapse' }}>
+              <thead className="sticky top-0 z-10">
+                <tr>
+                  {G_LABELS.map((label, i) => (
+                    <th key={label} colSpan={G_SPANS[i]}
+                      style={{ background: G_COLORS[i] }}
+                      className="px-3 py-1.5 text-center text-xs font-bold text-white tracking-wide border-r-2 border-white/30 last:border-0">
+                      {label}
+                    </th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+                <tr className="bg-slate-50 border-b border-slate-200">
+                  {visibleCols.map(col => (
+                    <th key={col.key}
+                      style={{ width: col.w, minWidth: col.w, borderTop: `2px solid ${G_COLORS[col.g]}` }}
+                      className="px-3 py-2 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap relative group bg-slate-50">
+                      {col.key === '_select' ? (
+                        (isManager || isSuperAdmin) ? (
+                          <input type="checkbox"
+                            checked={sorted.length > 0 && selectedIds.size === sorted.length}
+                            onChange={toggleSelectAll}
+                            className="w-3.5 h-3.5 rounded cursor-pointer" />
+                        ) : null
+                      ) : (
+                        <div className="flex items-center gap-1">
+                          <span className={col.sortable ? 'cursor-pointer hover:text-slate-800 select-none' : ''}
+                            onClick={() => col.sortable && toggleSort(col.key)}>
+                            {col.label}
+                            {sortCol === col.key && (
+                              <span style={{ color: G_COLORS[col.g] }}>{sortDir === 'asc' ? ' ↑' : ' ↓'}</span>
+                            )}
+                          </span>
+                          <button onClick={() => setFilterOpen(filterOpen === col.key ? null : col.key)}
+                            className={`ml-auto p-0.5 rounded flex-shrink-0 transition-colors ${filters[col.key] ? 'text-blue-500' : 'text-slate-300 hover:text-slate-500 opacity-0 group-hover:opacity-100'}`}>
+                            <Filter size={10} />
+                          </button>
+                        </div>
+                      )}
+                      {filterOpen === col.key && (
+                        <ColFilterPopup col={col}
+                          value={filters[col.key]}
+                          onApply={f => { setFilters(p => ({ ...p, [col.key]: f })); setFilterOpen(null) }}
+                          onClear={() => { setFilters(p => { const n = { ...p }; delete n[col.key]; return n }); setFilterOpen(null) }}
+                          onClose={() => setFilterOpen(null)} />
+                      )}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr><td colSpan={COLS.length} className="py-16 text-center"><Spinner size={20} /></td></tr>
+                ) : sorted.length === 0 ? (
+                  <tr><td colSpan={COLS.length} className="py-16 text-center text-sm text-slate-400">No leads found</td></tr>
+                ) : sorted.map(lead => (
+                  <tr key={lead.id}
+                    className={`border-b border-slate-100 hover:bg-slate-50 cursor-pointer ${selectedIds.has(lead.id) ? 'bg-blue-50/40' : ''}`}
+                    onClick={() => navigate(`/leads/${lead.id}`)}>
+
+                    {/* Checkbox */}
+                    {(isManager || isSuperAdmin) && (
+                      <td className="px-3 py-2.5" style={{ width: 36, minWidth: 36 }}
+                        onClick={e => { e.stopPropagation(); toggleSelect(lead.id) }}>
+                        <input type="checkbox"
+                          checked={selectedIds.has(lead.id)}
+                          onChange={() => toggleSelect(lead.id)}
+                          className="w-3.5 h-3.5 rounded cursor-pointer" />
+                      </td>
+                    )}
+
+                    {/* Lead info */}
+                    <td className="px-3 py-2.5" style={{ width: 180, minWidth: 180 }}>
+                      <div className="font-medium text-slate-800 text-sm truncate">{lead.name ?? '—'}</div>
+                      <div className="text-xs text-slate-400">{formatPhone(lead.phone)}</div>
+                    </td>
+                    <td className="px-3 py-2.5" style={{ width: 90, minWidth: 90 }}>
+                      <span className="text-xs text-slate-600">{lead.city ?? '—'}</span>
+                    </td>
+                    <td className="px-3 py-2.5" style={{ width: 110, minWidth: 110 }}>
+                      <span className="text-xs text-slate-500 truncate block">{lead.lead_source ?? '—'}</span>
+                    </td>
+
+                    {/* Pre-sales */}
+                    <td className="px-3 py-2.5" style={{ width: 90, minWidth: 90 }}>
+                      <span className="text-xs text-slate-500">{lead.assigned_name?.split(' ')[0] ?? '—'}</span>
+                    </td>
+                    <td className="px-3 py-2.5" style={{ width: 100, minWidth: 100 }}>
+                      {lead.call_status ? (
+                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${lead.call_status === 'Connected'
+                          ? 'bg-green-50 text-green-700 border-green-200'
+                          : 'bg-red-50 text-red-600 border-red-200'
+                          }`}>{lead.call_status === 'Connected' ? 'Connected' : 'Not conn.'}</span>
+                      ) : <span className="text-slate-300 text-xs">—</span>}
+                    </td>
+                    <td className="px-3 py-2.5" style={{ width: 210, minWidth: 210 }}>
+                      {lead.disposition ? <DispBadge value={lead.disposition} /> : <span className="text-slate-300 text-xs">—</span>}
+                    </td>
+                    <td className="px-3 py-2.5" style={{ width: 90, minWidth: 90 }}>
+                      {lead.calling_date
+                        ? <div className="text-xs font-medium text-slate-600">{format(new Date(lead.calling_date), 'd MMM')}</div>
+                        : <span className="text-slate-300 text-xs">—</span>}
+                    </td>
+                    <td className="px-3 py-2.5" style={{ width: 100, minWidth: 100 }}>
+                      {lead.callback_date ? (
+                        <div>
+                          <span className={`text-xs font-medium ${lead.callback_date === today ? 'text-amber-600' : 'text-slate-500'}`}>
+                            {lead.callback_date === today ? 'Today' : format(new Date(lead.callback_date), 'd MMM')}
+                          </span>
+                          {lead.callback_slot && <div className="text-xs text-slate-400">{lead.callback_slot.split(' ')[0]}</div>}
+                        </div>
+                      ) : <span className="text-slate-300 text-xs">—</span>}
+                    </td>
+
+                    {/* Sales */}
+                    <td className="px-3 py-2.5" style={{ width: 140, minWidth: 140 }}>
+                      {lead.sales_outcome ? (
+                        <span className="text-xs font-medium px-2 py-0.5 rounded-full border"
+                          style={getSalesOutcomeStyle(lead.sales_outcome)}>
+                          {SALES_OUTCOME_LABELS[lead.sales_outcome] ?? lead.sales_outcome}
+                        </span>
+                      ) : lead.stage === 'meeting_scheduled' ? (
+                        <span className="text-xs text-blue-600 font-medium">Mtg scheduled</span>
+                      ) : (
+                        <span className="text-slate-300 text-xs">—</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2.5" style={{ width: 105, minWidth: 105 }}>
+                      {lead.meeting_date ? (
+                        <div>
+                          <span className={`text-xs font-medium ${lead.meeting_date === today ? 'text-blue-600' : 'text-slate-500'}`}>
+                            {lead.meeting_date === today ? 'Today' : format(new Date(lead.meeting_date), 'd MMM')}
+                          </span>
+                          {lead.meeting_slot && <div className="text-xs text-slate-400">{lead.meeting_slot.split(' ')[0]}</div>}
+                        </div>
+                      ) : <span className="text-slate-300 text-xs">—</span>}
+                    </td>
+                    <td className="px-3 py-2.5" style={{ width: 100, minWidth: 100 }}>
+                      <span className="text-xs text-slate-500">{lead.sales_agent_name || '—'}</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 
