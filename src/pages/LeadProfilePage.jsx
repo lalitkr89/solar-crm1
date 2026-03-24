@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
 import Layout from '@/components/layout/Layout'
@@ -41,7 +41,7 @@ import { format } from 'date-fns'
 import {
   Phone, MessageCircle, MapPin, Clock, ArrowRight,
   ChevronDown, History, IndianRupee, Edit3, ClipboardList,
-  PhoneOff, ChevronRight, XCircle
+  PhoneOff, ChevronRight, XCircle, Calculator
 } from 'lucide-react'
 
 // ── Sales Outcome Config ──────────────────────────────────────
@@ -116,6 +116,7 @@ export default function LeadProfilePage() {
   const [showDisp, setShowDisp] = useState(false)
   const [showStage, setShowStage] = useState(false)
   const [showEdit, setShowEdit] = useState(false)
+  const [showEmiCalc, setShowEmiCalc] = useState(false)
   const [showSalesOutcome, setShowSalesOutcome] = useState(false)
   const [showOrderDetails, setShowOrderDetails] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -503,6 +504,10 @@ export default function LeadProfilePage() {
         <button onClick={() => setShowHistory(s => !s)} className="btn ml-auto">
           <History size={13} /> {showHistory ? 'Hide' : 'Activity'}
         </button>
+        <button onClick={() => setShowEmiCalc(true)}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-medium bg-violet-50 border-violet-200 text-violet-700 hover:bg-violet-100 transition-colors">
+          <Calculator size={13} /> EMI Calc
+        </button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -746,6 +751,10 @@ export default function LeadProfilePage() {
         saving={saving}
         currentDisp={lead.disposition}
       />
+
+      {/* EMI Calculator Modal */}
+      <EmiCalculatorModal open={showEmiCalc} onClose={() => setShowEmiCalc(false)}
+        defaultAmount={lead.quoted_amount || lead.sales_quoted_amount || ''} />
 
       {showSalesOutcome && (
         <SalesOutcomeModal
@@ -1157,6 +1166,167 @@ function getNextStages(currentStage, role, isSuperAdmin) {
   return next ? [next, ...closed] : closed
 }
 
+
+// ── EMI Calculator Modal ──────────────────────────────────────
+function EmiCalculatorModal({ open, onClose, defaultAmount }) {
+  const [loanAmt, setLoanAmt] = useState('')
+  const [tenure, setTenure] = useState('')
+  const [tenureType, setTenureType] = useState('years') // years | months
+  const [rate, setRate] = useState('')
+  const [method, setMethod] = useState('reducing') // reducing | flat
+
+  // Pre-fill loan amount from quoted amount
+  useEffect(() => {
+    if (open && defaultAmount && !loanAmt) {
+      setLoanAmt(String(defaultAmount))
+    }
+  }, [open])
+
+  const result = useMemo(() => {
+    const P = parseFloat(loanAmt)
+    const r = parseFloat(rate)
+    const t = parseFloat(tenure)
+    if (!P || !r || !t || P <= 0 || r <= 0 || t <= 0) return null
+
+    const months = tenureType === 'years' ? t * 12 : t
+
+    if (method === 'reducing') {
+      // Reducing balance (standard bank EMI formula)
+      const monthlyRate = r / 100 / 12
+      const emi = (P * monthlyRate * Math.pow(1 + monthlyRate, months)) /
+        (Math.pow(1 + monthlyRate, months) - 1)
+      const totalPayable = emi * months
+      const totalInterest = totalPayable - P
+      return {
+        emi: Math.round(emi),
+        totalPayable: Math.round(totalPayable),
+        totalInterest: Math.round(totalInterest),
+        months,
+      }
+    } else {
+      // Flat rate method
+      const totalInterest = P * (r / 100) * (months / 12)
+      const totalPayable = P + totalInterest
+      const emi = totalPayable / months
+      return {
+        emi: Math.round(emi),
+        totalPayable: Math.round(totalPayable),
+        totalInterest: Math.round(totalInterest),
+        months,
+      }
+    }
+  }, [loanAmt, tenure, tenureType, rate, method])
+
+  const fmt = (n) => Number(n).toLocaleString('en-IN')
+
+  return (
+    <Modal open={open} onClose={onClose} title="EMI Calculator" width={480}>
+      <div className="flex flex-col gap-4">
+
+        {/* Method Toggle */}
+        <div>
+          <label className="label mb-2">Calculation method</label>
+          <div className="flex rounded-lg border border-slate-200 overflow-hidden">
+            {[
+              { key: 'reducing', label: '📉 Reducing Balance', sub: '(Govt. Banks)' },
+              { key: 'flat', label: '📋 Flat Rate', sub: '(Mostly NBFC/Private Lenders)' },
+            ].map(m => (
+              <button key={m.key} type="button" onClick={() => setMethod(m.key)}
+                className={`flex-1 py-2.5 px-3 text-left transition-colors ${method === m.key
+                  ? 'bg-violet-600 text-white'
+                  : 'bg-white text-slate-500 hover:bg-slate-50'}`}>
+                <div className="text-xs font-semibold">{m.label}</div>
+                <div className={`text-[10px] ${method === m.key ? 'text-violet-200' : 'text-slate-400'}`}>{m.sub}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Inputs */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="col-span-2">
+            <label className="label">Loan Amount (₹)</label>
+            <input className="input" type="number" placeholder="e.g. 300000"
+              value={loanAmt} onChange={e => setLoanAmt(e.target.value)} />
+            {defaultAmount && !loanAmt && (
+              <button type="button" onClick={() => setLoanAmt(String(defaultAmount))}
+                className="mt-1 text-[11px] text-violet-600 underline">
+                Use quoted amount: ₹{fmt(defaultAmount)}
+              </button>
+            )}
+          </div>
+
+          <div>
+            <label className="label">Interest Rate (% per year)</label>
+            <input className="input" type="number" step="0.1" placeholder="e.g. 10.5"
+              value={rate} onChange={e => setRate(e.target.value)} />
+          </div>
+
+          <div>
+            <label className="label">Tenure</label>
+            <div className="flex gap-1">
+              <input className="input" type="number" placeholder="e.g. 5"
+                value={tenure} onChange={e => setTenure(e.target.value)} style={{ flex: 1 }} />
+              <select className="select" value={tenureType} onChange={e => setTenureType(e.target.value)}
+                style={{ width: 90 }}>
+                <option value="years">Years</option>
+                <option value="months">Months</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {/* Result */}
+        {result ? (
+          <div className="rounded-xl bg-violet-50 border border-violet-200 p-4">
+            <div className="text-center mb-3">
+              <p className="text-xs text-violet-500 font-semibold uppercase tracking-widest mb-1">Monthly EMI</p>
+              <p className="text-3xl font-bold text-violet-700">₹{fmt(result.emi)}</p>
+              <p className="text-xs text-violet-400 mt-0.5">for {result.months} months</p>
+            </div>
+            <div className="grid grid-cols-3 gap-2 text-center mt-3 pt-3 border-t border-violet-200">
+              <div>
+                <p className="text-[10px] text-slate-400 uppercase tracking-wide">Principal</p>
+                <p className="text-sm font-semibold text-slate-700">₹{fmt(loanAmt)}</p>
+              </div>
+              <div>
+                <p className="text-[10px] text-slate-400 uppercase tracking-wide">Total Interest</p>
+                <p className="text-sm font-semibold text-red-600">₹{fmt(result.totalInterest)}</p>
+              </div>
+              <div>
+                <p className="text-[10px] text-slate-400 uppercase tracking-wide">Total Payable</p>
+                <p className="text-sm font-semibold text-slate-700">₹{fmt(result.totalPayable)}</p>
+              </div>
+            </div>
+            <div className="mt-3 pt-3 border-t border-violet-200">
+              <div className="flex justify-between text-xs text-slate-500 mb-1">
+                <span>Principal</span>
+                <span>Interest</span>
+              </div>
+              <div className="flex rounded-full overflow-hidden h-2.5">
+                <div className="bg-violet-500 transition-all" style={{ width: `${Math.round((parseFloat(loanAmt) / result.totalPayable) * 100)}%` }} />
+                <div className="bg-red-300 flex-1" />
+              </div>
+              <div className="flex justify-between text-[10px] text-slate-400 mt-1">
+                <span>{Math.round((parseFloat(loanAmt) / result.totalPayable) * 100)}%</span>
+                <span>{Math.round((result.totalInterest / result.totalPayable) * 100)}%</span>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="rounded-xl bg-slate-50 border border-slate-200 p-6 text-center text-slate-400 text-sm">
+            Loan amount, rate aur tenure daalo — EMI calculate ho jaayegi ⚡
+          </div>
+        )}
+
+        <div className="flex justify-end pt-1">
+          <button onClick={onClose} className="btn">Close</button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
 // ── Edit Lead Modal ───────────────────────────────────────────
 function EditLeadModal({ open, lead, onClose, onSaved, userId, userName, role }) {
   const { isSuperAdmin } = useAuth()
@@ -1211,6 +1381,21 @@ function EditLeadModal({ open, lead, onClose, onSaved, userId, userName, role })
   }, [open, lead])
 
   function set(field, val) { setForm(f => ({ ...f, [field]: val })) }
+
+  // ── Solar auto-calc: bill + roof_area → system kW ──────────
+  const solarCalc = useMemo(() => {
+    const bill = parseFloat(form.monthly_bill)
+    const roofArea = parseFloat(form.roof_area)
+    if (!bill || bill <= 0) return null
+    const units = bill / 8
+    const requiredKw = units / 120
+    const recommendedKw = Math.round(requiredKw)
+    const roofCapacity = roofArea > 0 ? roofArea / 100 : Infinity
+    const roofLimited = roofArea > 0 && roofCapacity < recommendedKw
+    const finalKw = roofLimited ? Math.floor(roofCapacity) : recommendedKw
+    return { units: Math.round(units * 10) / 10, requiredKw: Math.round(requiredKw * 10) / 10, finalKw, roofLimited, roofNeeded: recommendedKw * 100 }
+  }, [form.monthly_bill, form.roof_area])
+
 
   async function handleSave() {
     if (!form.phone) { setError('Phone is required'); return }
@@ -1361,7 +1546,20 @@ function EditLeadModal({ open, lead, onClose, onSaved, userId, userName, role })
             <div><label className="label">Electricity board</label><input className="input" value={form.electricity_board ?? ''} onChange={e => set('electricity_board', e.target.value)} /></div>
             <div><label className="label">Sanctioned load (kW)</label><input className="input" type="number" value={form.sanctioned_load ?? ''} onChange={e => set('sanctioned_load', e.target.value)} /></div>
             <div><label className="label">Monthly bill (₹)</label><input className="input" type="number" value={form.monthly_bill ?? ''} onChange={e => set('monthly_bill', e.target.value)} /></div>
-            <div><label className="label">Units per month (kWh)</label><input className="input" type="number" value={form.units_per_month ?? ''} onChange={e => set('units_per_month', e.target.value)} /></div>
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="label mb-0">Units per month (kWh)</label>
+                {solarCalc && !form.units_per_month && (
+                  <button type="button"
+                    onClick={() => set('units_per_month', String(solarCalc.units))}
+                    className="text-[11px] font-semibold text-blue-600 bg-blue-50 border border-blue-200 rounded-md px-2 py-0.5 hover:bg-blue-100 transition-colors">
+                    ⚡ Auto: {solarCalc.units}
+                  </button>
+                )}
+              </div>
+              <input className="input" type="number" placeholder="kWh"
+                value={form.units_per_month ?? ''} onChange={e => set('units_per_month', e.target.value)} />
+            </div>
           </div>
         </div>
 
@@ -1408,7 +1606,32 @@ function EditLeadModal({ open, lead, onClose, onSaved, userId, userName, role })
         <div>
           <p className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-3 pb-1 border-b border-slate-100">Solar & remarks</p>
           <div className="grid grid-cols-2 gap-3">
-            <div><label className="label">System size (kW)</label><input className="input" type="number" value={form.system_size_kw ?? ''} onChange={e => set('system_size_kw', e.target.value)} /></div>
+
+            {/* System size with auto-calculate */}
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="label mb-0">System size (kW)</label>
+                {solarCalc && (
+                  <button type="button"
+                    onClick={() => set('system_size_kw', String(solarCalc.finalKw))}
+                    className="text-[11px] font-semibold text-blue-600 bg-blue-50 border border-blue-200 rounded-md px-2 py-0.5 hover:bg-blue-100 transition-colors">
+                    ⚡ Auto: {solarCalc.finalKw} kW
+                  </button>
+                )}
+              </div>
+              <input className="input" type="number" placeholder="kW"
+                value={form.system_size_kw ?? ''} onChange={e => set('system_size_kw', e.target.value)} />
+              {solarCalc && (
+                <div className={`mt-1.5 rounded-lg px-3 py-2 text-[11px] leading-relaxed ${solarCalc.roofLimited ? "bg-amber-50 border border-amber-200 text-amber-800" : "bg-green-50 border border-green-200 text-green-800"}`}>
+                  {solarCalc.roofLimited ? (
+                    <>⚠️ Roof limited: <b>{solarCalc.finalKw} kW</b> recommended (bill needs {solarCalc.requiredKw} kW, {solarCalc.roofNeeded} sqft needed)</>
+                  ) : (
+                    <>✅ Bill = {solarCalc.units} units/mo → <b>{solarCalc.finalKw} kW</b> recommended</>
+                  )}
+                </div>
+              )}
+            </div>
+
             <div><label className="label">System type</label>
               <select className="select" value={form.system_type ?? ''} onChange={e => set('system_type', e.target.value)}>
                 <option value="">Select</option>{['On-grid', 'Off-grid', 'Hybrid'].map(s => <option key={s}>{s}</option>)}
