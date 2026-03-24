@@ -163,9 +163,9 @@ export default function PresalesPage() {
         presales_agent_id, presales_agent:presales_agent_id(name),
         sales_agent_id, sales_agent:sales_agent_id(name),
         updated_at`)
-      .in('stage', ['new', 'meeting_scheduled', 'qc_followup'])
+      .in('stage', ['new', 'meeting_scheduled', 'qc_followup', 'non_qualified', 'not_interested', 'lost', 'sale_pending_approval', 'sale_closed', 'sale_rejected'])
       .order('updated_at', { ascending: false })
-    if (!isManager && !isSuperAdmin) q = q.eq('assigned_to', profile.id)
+    if (!isManager && !isSuperAdmin) q = q.eq('presales_agent_id', profile.id)
     const { data } = await q
     setLeads((data ?? []).map(l => ({
       ...l,
@@ -476,10 +476,11 @@ export default function PresalesPage() {
                     {/* Checkbox */}
                     {(isManager || isSuperAdmin) && (
                       <td className="px-3 py-2.5" style={{ width: 36, minWidth: 36 }}
-                        onClick={e => { e.stopPropagation(); toggleSelect(lead.id) }}>
+                        onClick={e => { e.stopPropagation(); e.preventDefault(); toggleSelect(lead.id) }}>
                         <input type="checkbox"
                           checked={selectedIds.has(lead.id)}
-                          onChange={() => toggleSelect(lead.id)}
+                          onChange={e => { e.stopPropagation(); toggleSelect(lead.id) }}
+                          onClick={e => e.stopPropagation()}
                           className="w-3.5 h-3.5 rounded cursor-pointer" />
                       </td>
                     )}
@@ -536,6 +537,10 @@ export default function PresalesPage() {
                         </span>
                       ) : lead.stage === 'meeting_scheduled' ? (
                         <span className="text-xs text-blue-600 font-medium">Mtg scheduled</span>
+                      ) : lead.stage === 'qc_followup' ? (
+                        <span className="text-xs font-medium px-2 py-0.5 rounded-full border bg-purple-50 text-purple-700 border-purple-200">
+                          📞 Rearrange Meeting
+                        </span>
                       ) : (
                         <span className="text-slate-300 text-xs">—</span>
                       )}
@@ -629,7 +634,13 @@ function BulkEditModal({ open, onClose, selectedIds, onDone }) {
       return
     }
 
-    // Batch update — sab selected leads pe
+    // Step 1 — pehle purane values fetch karo (snapshot for undo)
+    const { data: oldLeads } = await supabase
+      .from('leads')
+      .select('id, name, phone, presales_agent_id, assigned_to, calling_date, callback_date, callback_slot, disposition, stage')
+      .in('id', selectedIds)
+
+    // Step 2 — batch update karo
     const { error } = await supabase
       .from('leads')
       .update(updates)
@@ -637,9 +648,31 @@ function BulkEditModal({ open, onClose, selectedIds, onDone }) {
 
     if (error) {
       alert('Error: ' + error.message)
-    } else {
-      onDone()
+      setSaving(false)
+      return
     }
+
+    // Step 3 — batch_id generate karo aur lead_history mein snapshot save karo
+    const batchId = `bulk_${Date.now()}`
+    const historyRows = (oldLeads ?? []).map(old => ({
+      lead_id: old.id,
+      action: 'Bulk edit',
+      field: Object.keys(updates).join(', '),
+      old_val: JSON.stringify(
+        Object.keys(updates).reduce((acc, k) => ({ ...acc, [k]: old[k] ?? null }), {})
+      ),
+      new_val: JSON.stringify(updates),
+      changed_by: null,
+      changed_by_name: 'Manager (Bulk)',
+      batch_id: batchId,
+      created_at: new Date().toISOString(),
+    }))
+
+    if (historyRows.length > 0) {
+      await supabase.from('lead_history').insert(historyRows)
+    }
+
+    onDone()
     setSaving(false)
   }
 
@@ -662,7 +695,7 @@ function BulkEditModal({ open, onClose, selectedIds, onDone }) {
   const STAGES = [
     { value: 'new', label: 'New' },
     { value: 'meeting_scheduled', label: 'Meeting Scheduled' },
-    { value: 'qc_followup', label: 'QC Follow Up' },
+    { value: 'qc_followup', label: 'Rearrange Meeting' },
     { value: 'not_interested', label: 'Not Interested' },
     { value: 'non_qualified', label: 'Non Qualified' },
     { value: 'lost', label: 'Lost' },

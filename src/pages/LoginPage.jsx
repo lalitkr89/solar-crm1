@@ -5,19 +5,21 @@ import { Zap, Mail, Lock, AlertCircle } from 'lucide-react'
 
 export default function LoginPage() {
   const { signIn } = useAuth()
-  const navigate   = useNavigate()
-  const [email,    setEmail]    = useState('')
+  const navigate = useNavigate()
+
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [error,    setError]    = useState('')
-  const [loading,  setLoading]  = useState(false)
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
 
   async function handleSubmit(e) {
     e.preventDefault()
     setError('')
     setLoading(true)
+
     try {
       await signIn(email, password)
-      navigate('/')
+      setTimeout(() => navigate('/'), 400)
     } catch (err) {
       setError(err.message || 'Invalid email or password')
     } finally {
@@ -26,114 +28,112 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex" style={{ background: '#0B1F35' }}>
-      {/* Left panel */}
-      <div className="hidden lg:flex flex-col justify-between w-[480px] p-12"
-           style={{ background: '#0B1F35' }}>
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center">
-            <Zap size={18} className="text-white" />
-          </div>
-          <span className="text-white text-lg font-semibold tracking-tight">SolarCRM</span>
-        </div>
+    <div className="min-h-screen flex items-center justify-center relative overflow-hidden bg-[#0B1F35]">
 
-        <div>
-          <h1 className="text-4xl font-semibold text-white leading-tight mb-4">
-            Manage your<br />entire solar<br />pipeline.
-          </h1>
-          <p className="text-slate-400 text-base leading-relaxed">
-            From first call to AMC renewal — every team,<br />
-            every stage, one platform.
-          </p>
-        </div>
+      {/* 🌞 SOLAR GLOW BACKGROUND */}
+      <div className="absolute inset-0">
+        {/* sun glow */}
+        <div className="absolute w-[500px] h-[500px] bg-orange-400/30 blur-[120px] top-[-150px] right-[-100px]" />
 
-        <div className="grid grid-cols-2 gap-3">
-          {[
-            { label: 'Teams', value: '5' },
-            { label: 'Pipeline stages', value: '11' },
-            { label: 'Role-based access', value: '✓' },
-            { label: 'Real-time sync', value: '✓' },
-          ].map(s => (
-            <div key={s.label} className="rounded-xl p-4"
-                 style={{ background: 'rgba(255,255,255,0.05)' }}>
-              <div className="text-2xl font-semibold text-white mb-0.5">{s.value}</div>
-              <div className="text-xs text-slate-400">{s.label}</div>
-            </div>
-          ))}
-        </div>
+        {/* blue energy glow */}
+        <div className="absolute w-[400px] h-[400px] bg-blue-500/20 blur-[120px] bottom-[-100px] left-[-100px]" />
       </div>
 
-      {/* Right panel — login form */}
-      <div className="flex-1 flex items-center justify-center bg-slate-50 rounded-l-3xl">
-        <div className="w-full max-w-sm px-6">
-          {/* Mobile logo */}
-          <div className="flex lg:hidden items-center gap-2 mb-8">
-            <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center">
-              <Zap size={16} className="text-white" />
+      {/* 💎 CARD */}
+      <div className="relative z-10 w-full max-w-md px-6">
+        <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-8 shadow-2xl">
+
+          {/* LOGO */}
+          <div className="flex flex-col items-center mb-6">
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-orange-400 to-yellow-300 flex items-center justify-center shadow-lg mb-3">
+              <Zap className="text-black" />
             </div>
-            <span className="text-navy-900 text-base font-semibold">SolarCRM</span>
+            <h1 className="text-white text-xl font-semibold tracking-tight">
+              SolarCRM
+            </h1>
+            <p className="text-xs text-orange-300">
+              Powering solar businesses ⚡
+            </p>
           </div>
 
-          <h2 className="text-2xl font-semibold text-slate-800 mb-1">Welcome back</h2>
-          <p className="text-slate-500 text-sm mb-8">Sign in to your account</p>
+          {/* TITLE */}
+          <div className="text-center mb-6">
+            <h2 className="text-2xl font-semibold text-white">
+              Welcome back
+            </h2>
+            <p className="text-slate-400 text-sm mt-1">
+              Track leads. Close deals. Grow faster.
+            </p>
+          </div>
 
+          {/* ERROR */}
           {error && (
-            <div className="flex items-center gap-2 p-3 rounded-lg bg-red-50 border border-red-200 mb-4">
-              <AlertCircle size={15} className="text-red-500 flex-shrink-0" />
-              <span className="text-sm text-red-700">{error}</span>
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20 mb-4">
+              <AlertCircle size={16} className="text-red-400" />
+              <span className="text-sm text-red-300">{error}</span>
             </div>
           )}
 
+          {/* FORM */}
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+
+            {/* EMAIL */}
             <div>
-              <label className="label">Email</label>
+              <label className="text-xs text-slate-400 mb-1 block">Email</label>
               <div className="relative">
-                <Mail size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                 <input
                   type="email"
-                  className="input pl-9"
+                  className="w-full pl-10 pr-3 py-2.5 rounded-lg bg-white/5 border border-white/10 text-white
+                  focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 outline-none"
                   placeholder="you@company.com"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
-                  required
-                  autoComplete="email"
                 />
               </div>
             </div>
 
+            {/* PASSWORD */}
             <div>
-              <label className="label">Password</label>
+              <label className="text-xs text-slate-400 mb-1 block">Password</label>
               <div className="relative">
-                <Lock size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                 <input
                   type="password"
-                  className="input pl-9"
+                  className="w-full pl-10 pr-3 py-2.5 rounded-lg bg-white/5 border border-white/10 text-white
+                  focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 outline-none"
                   placeholder="••••••••"
                   value={password}
                   onChange={e => setPassword(e.target.value)}
-                  required
-                  autoComplete="current-password"
                 />
+              </div>
+
+              <div className="text-right mt-1">
+                <a href="#" className="text-xs text-orange-300 hover:underline">
+                  Forgot password?
+                </a>
               </div>
             </div>
 
+            {/* BUTTON */}
             <button
               type="submit"
               disabled={loading}
-              className="btn-primary w-full justify-center py-2.5 mt-2 disabled:opacity-60"
+              className="w-full py-2.5 mt-2 rounded-lg font-medium text-black
+              bg-gradient-to-r from-orange-400 to-yellow-300
+              hover:from-orange-300 hover:to-yellow-200
+              transition transform hover:-translate-y-[1px] active:scale-[0.98]
+              shadow-lg flex items-center justify-center"
             >
-              {loading ? (
-                <span className="flex items-center gap-2">
-                  <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  Signing in...
-                </span>
-              ) : 'Sign in'}
+              {loading ? 'Signing in...' : 'Sign in'}
             </button>
+
           </form>
 
-          <p className="text-center text-xs text-slate-400 mt-8">
-            Solar CRM · Internal use only
+          <p className="text-center text-xs text-slate-500 mt-6">
+            From first lead to final installation — seamlessly ⚡
           </p>
+
         </div>
       </div>
     </div>

@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
+import { supabase } from '@/lib/supabase'
 import {
   LayoutDashboard, Kanban, Phone, Users, Wallet,
   HardHat, Shield, CalendarCheck, Zap, LogOut,
-  UserCog, Upload, Menu, X,
+  UserCog, Upload, Menu, X, ClipboardCheck,
 } from 'lucide-react'
 
 const TEAM_COLOR = {
@@ -15,7 +16,7 @@ const TEAM_COLOR = {
   amc: '#BA7517',
 }
 
-function NavContent({ onClose, profile, role, isSuperAdmin, isManager, onLogout }) {
+function NavContent({ onClose, profile, role, isSuperAdmin, isManager, onLogout, pendingCount = 0, pendingDispCount = 0 }) {
   const initial = profile?.name?.[0]?.toUpperCase() ?? '?'
   const teamColor = TEAM_COLOR[profile?.team] ?? '#378ADD'
 
@@ -82,6 +83,17 @@ function NavContent({ onClose, profile, role, isSuperAdmin, isManager, onLogout 
               className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
               <Upload size={15} /> Bulk import
             </NavLink>
+            {(role === 'presales_manager' || isSuperAdmin) && (
+              <NavLink to="/ps-disposition-approvals" onClick={onClose}
+                className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+                <ClipboardCheck size={15} /> Disposition Approvals
+                {pendingDispCount > 0 && (
+                  <span className="ml-auto bg-amber-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none">
+                    {pendingDispCount}
+                  </span>
+                )}
+              </NavLink>
+            )}
           </>
         )}
 
@@ -92,6 +104,17 @@ function NavContent({ onClose, profile, role, isSuperAdmin, isManager, onLogout 
               className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
               <Users size={15} /> Meetings & leads
             </NavLink>
+            {(role === 'sales_manager' || isSuperAdmin) && (
+              <NavLink to="/sales-approval" onClick={onClose}
+                className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+                <ClipboardCheck size={15} /> Order Approvals
+                {pendingCount > 0 && (
+                  <span className="ml-auto bg-amber-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none">
+                    {pendingCount}
+                  </span>
+                )}
+              </NavLink>
+            )}
           </>
         )}
 
@@ -151,6 +174,25 @@ export default function Sidebar() {
   const { profile, role, isSuperAdmin, isManager, signOut } = useAuth()
   const navigate = useNavigate()
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [pendingCount, setPendingCount] = useState(0)
+  const [pendingDispCount, setPendingDispCount] = useState(0)
+
+  useEffect(() => {
+    if (role === 'sales_manager' || role === 'super_admin') {
+      supabase
+        .from('leads')
+        .select('id', { count: 'exact', head: true })
+        .eq('stage', 'sale_pending_approval')
+        .then(({ count }) => setPendingCount(count ?? 0))
+    }
+    if (role === 'presales_manager' || role === 'super_admin') {
+      supabase
+        .from('disposition_approvals')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'pending')
+        .then(({ count }) => setPendingDispCount(count ?? 0))
+    }
+  }, [role])
 
   async function handleLogout() {
     await signOut()
@@ -160,6 +202,8 @@ export default function Sidebar() {
   const navProps = {
     profile, role, isSuperAdmin, isManager,
     onLogout: handleLogout,
+    pendingCount,
+    pendingDispCount,
   }
 
   return (

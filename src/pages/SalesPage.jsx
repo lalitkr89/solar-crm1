@@ -34,8 +34,8 @@ export function stopSalesCallingMode() {
 
 // ── Column definitions ────────────────────────────────────────
 const COLS = [
-  { key: '_select', label: '', w: 36, sortable: false, g: 0 },
   // Group 0 — Lead Info
+  { key: '_select', label: '', w: 36, sortable: false, g: 0 },
   { key: 'name', label: 'Name / Phone', w: 180, sortable: true, g: 0 },
   { key: 'city', label: 'City', w: 90, sortable: true, g: 0 },
   { key: 'lead_source', label: 'Source', w: 110, sortable: true, g: 0 },
@@ -217,7 +217,7 @@ export default function SalesPage() {
         sales_agent_id, sales_agent:sales_agent_id(name),
         updated_at
       `)
-      .eq('stage', 'meeting_scheduled')
+      .in('stage', ['meeting_scheduled', 'meeting_done', 'qc_followup', 'sale_pending_approval', 'sale_closed', 'sale_rejected'])
       .order('meeting_date', { ascending: true })
 
     // Role based filtering
@@ -315,6 +315,7 @@ export default function SalesPage() {
   }
 
   const activeFilters = Object.keys(filters).length
+
   const visibleCols = COLS.filter(c => c.key !== '_select' || isManager || isSuperAdmin)
   const G_SPANS = G_LABELS.map((_, i) => visibleCols.filter(c => c.g === i).length)
   const totalW = visibleCols.reduce((s, c) => s + c.w, 0)
@@ -457,221 +458,308 @@ export default function SalesPage() {
         <span className="text-xs text-slate-400 ml-auto">{sorted.length} results</span>
       </div>
 
-      {/* Bulk action bar */}
+      {/* Bulk edit bar */}
       {(isManager || isSuperAdmin) && selectedIds.size > 0 && (
-        <div className="mb-3 px-4 py-2.5 rounded-xl flex items-center gap-3"
-          style={{ background: '#eff6ff', border: '1px solid #bfdbfe' }}>
+        <div className="flex items-center gap-3 mb-3 px-4 py-2.5 bg-blue-50 border border-blue-200 rounded-xl">
           <span className="text-sm font-semibold text-blue-800">{selectedIds.size} lead{selectedIds.size > 1 ? 's' : ''} selected</span>
           <button onClick={() => setShowBulkEdit(true)}
-            className="ml-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-600 text-white hover:bg-blue-700">
-            Bulk Edit
-          </button>
+            className="btn-primary text-xs py-1 px-3">Bulk edit</button>
           <button onClick={() => setSelectedIds(new Set())}
-            className="ml-auto text-xs text-blue-500 hover:text-blue-700">
-            Clear selection
-          </button>
+            className="ml-auto text-xs text-slate-400 hover:text-slate-600">Clear</button>
         </div>
       )}
 
-      {/* Table */}
-      <div className="card p-0 rounded-xl border border-slate-200" style={{ overflowX: 'auto' }}>
-        <div style={{ overflowY: 'auto', maxHeight: 'calc(100vh - 280px)' }}>
-          <table style={{ minWidth: totalW, width: '100%', borderCollapse: 'collapse' }}>
-            <thead className="sticky top-0 z-10">
-              {/* Group headers */}
-              <tr>
-                {G_LABELS.map((label, i) => (
-                  <th key={label} colSpan={G_SPANS[i]}
-                    style={{ background: G_COLORS[i] }}
-                    className="px-3 py-1.5 text-center text-xs font-bold text-white tracking-wide border-r-2 border-white/30 last:border-0">
-                    {label}
-                  </th>
-                ))}
-              </tr>
-              {/* Column headers */}
-              <tr className="bg-slate-50 border-b border-slate-200">
-                {visibleCols.map(col => (
-                  <th key={col.key}
-                    style={{ width: col.w, minWidth: col.w, borderTop: `2px solid ${G_COLORS[col.g]}` }}
-                    className="px-3 py-2 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap relative group bg-slate-50">
-                    {col.key === '_select' ? (
-                      (isManager || isSuperAdmin) ? (
-                        <input type="checkbox"
-                          checked={sorted.length > 0 && selectedIds.size === sorted.length}
-                          onChange={toggleSelectAll}
-                          className="w-3.5 h-3.5 rounded cursor-pointer accent-blue-600" />
-                      ) : null
-                    ) : (
-                      <div className="flex items-center gap-1">
-                        <span className={col.sortable ? 'cursor-pointer hover:text-slate-800 select-none' : ''}
-                          onClick={() => col.sortable && toggleSort(col.key)}>
-                          {col.label}
-                          {sortCol === col.key && (
-                            <span style={{ color: G_COLORS[col.g] }}>{sortDir === 'asc' ? ' ↑' : ' ↓'}</span>
-                          )}
-                        </span>
-                        <button onClick={() => setFilterOpen(filterOpen === col.key ? null : col.key)}
-                          className={`ml-auto p-0.5 rounded flex-shrink-0 transition-colors ${filters[col.key] ? 'text-blue-500' : 'text-slate-300 hover:text-slate-500 opacity-0 group-hover:opacity-100'}`}>
-                          <Filter size={10} />
-                        </button>
-                      </div>
-                    )}
-                    {filterOpen === col.key && (
-                      <ColFilterPopup col={col}
-                        value={filters[col.key]}
-                        onApply={f => { setFilters(p => ({ ...p, [col.key]: f })); setFilterOpen(null) }}
-                        onClear={() => { setFilters(p => { const n = { ...p }; delete n[col.key]; return n }); setFilterOpen(null) }}
-                        onClose={() => setFilterOpen(null)} />
-                    )}
-                  </th>
-                ))}
-              </tr>
-            </thead>
+      {/* Mobile card view */}
+      <div className="block lg:hidden flex flex-col gap-2 pb-4">
+        {loading ? (
+          <div className="flex justify-center py-16"><Spinner size={20} /></div>
+        ) : sorted.length === 0 ? (
+          <div className="text-center py-16 text-sm text-slate-400">No leads found</div>
+        ) : sorted.map(lead => {
+          const isToday = lead.meeting_date === today
+          const isPast = lead.meeting_date < today
+          const outcomeStyle = getOutcomeStyle(lead.sales_outcome)
 
-            <tbody>
-              {loading ? (
-                <tr><td colSpan={visibleCols.length} className="py-16 text-center"><Spinner size={20} /></td></tr>
-              ) : sorted.length === 0 ? (
-                <tr><td colSpan={visibleCols.length} className="py-16 text-center text-sm text-slate-400">No leads found</td></tr>
-              ) : sorted.map(lead => {
-                const isToday = lead.meeting_date === today
-                const isPast = lead.meeting_date < today
-                const outcomeStyle = getOutcomeStyle(lead.sales_outcome)
-                const statusStyle = lead.sales_lead_status ? getLeadStatusStyle(lead.sales_lead_status) : null
-                const mtgStyle = lead.sales_meeting_status ? getMtgStatusStyle(lead.sales_meeting_status) : null
+          const borderColor = lead.sales_outcome?.includes('order_closed') ? '#14532d'
+            : lead.sales_outcome?.includes('hot') ? '#92400e'
+              : lead.sales_outcome?.includes('moderate') ? '#1e3a8a'
+                : lead.sales_outcome?.includes('cold') ? '#4c1d95'
+                  : lead.sales_outcome?.includes('not_interested') || lead.sales_outcome?.includes('non_qualified') ? '#7f1d1d'
+                    : lead.sales_outcome?.includes('not_connected') ? '#713f12'
+                      : isPast && !lead.sales_outcome ? '#d97706'
+                        : '#cbd5e1'
 
-                return (
-                  <tr key={lead.id}
-                    className={`border-b border-slate-100 hover:bg-slate-50 cursor-pointer ${selectedIds.has(lead.id) ? 'bg-blue-50/40' : isToday ? 'bg-blue-50/30' : isPast && !lead.sales_outcome ? 'bg-amber-50/30' : ''}`}
-                    onClick={() => navigate(`/leads/${lead.id}`)}>
+          const avatarBg = lead.sales_outcome?.includes('order_closed') ? { bg: '#dcfce7', text: '#14532d' }
+            : lead.sales_outcome?.includes('hot') ? { bg: '#fef3c7', text: '#92400e' }
+              : lead.sales_outcome?.includes('moderate') ? { bg: '#dbeafe', text: '#1e3a8a' }
+                : lead.sales_outcome?.includes('cold') ? { bg: '#ede9fe', text: '#4c1d95' }
+                  : lead.sales_outcome?.includes('not_interested') || lead.sales_outcome?.includes('non_qualified') ? { bg: '#fee2e2', text: '#7f1d1d' }
+                    : { bg: '#f1f5f9', text: '#64748b' }
 
-                    {/* Checkbox */}
-                    {(isManager || isSuperAdmin) && (
-                      <td className="px-3 py-2.5" style={{ width: 36, minWidth: 36 }}
-                        onClick={e => e.stopPropagation()}>
-                        <input type="checkbox"
-                          checked={selectedIds.has(lead.id)}
-                          onClick={e => e.stopPropagation()}
-                          onChange={e => { e.stopPropagation(); toggleSelect(lead.id) }}
-                          className="w-3.5 h-3.5 rounded cursor-pointer accent-blue-600" />
-                      </td>
-                    )}
+          return (
+            <div key={lead.id}
+              className="bg-white rounded-xl border border-slate-200 overflow-hidden cursor-pointer"
+              onClick={() => navigate(`/leads/${lead.id}`)}>
+              <div style={{ borderLeft: `3px solid ${borderColor}`, padding: '11px 13px' }}>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-medium flex-shrink-0"
+                      style={{ background: avatarBg.bg, color: avatarBg.text }}>
+                      {lead.name?.[0]?.toUpperCase() ?? '?'}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-slate-800 truncate">{lead.name ?? '—'}</div>
+                      <div className="text-xs text-slate-400 mt-0.5">{formatPhone(lead.phone)} · {lead.city ?? '—'}</div>
+                    </div>
+                  </div>
+                  {lead.sales_outcome ? (
+                    <span className="text-xs font-medium px-2 py-0.5 rounded-full border whitespace-nowrap flex-shrink-0"
+                      style={{ background: outcomeStyle?.bg, color: outcomeStyle?.text, borderColor: outcomeStyle?.border }}>
+                      {OUTCOME_LABELS[lead.sales_outcome] || lead.sales_outcome}
+                    </span>
+                  ) : (
+                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full border whitespace-nowrap flex-shrink-0 ${isPast ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-blue-50 text-blue-700 border-blue-200'}`}>
+                      {isPast ? 'Outcome pending' : 'Scheduled'}
+                    </span>
+                  )}
+                </div>
+                <div className="flex gap-1.5 mt-2 flex-wrap">
+                  {lead.sales_name && (
+                    <span className="text-xs px-2 py-1 rounded-md bg-slate-50 text-slate-500">
+                      {lead.sales_name.split(' ')[0]}{lead.lead_source ? ` · ${lead.lead_source}` : ''}
+                    </span>
+                  )}
+                  {lead.meeting_date && (
+                    <span className={`text-xs px-2 py-1 rounded-md font-medium ${isToday ? 'bg-blue-50 text-blue-700' : isPast ? 'bg-amber-50 text-amber-700' : 'bg-slate-50 text-slate-500'}`}>
+                      Mtg: {isToday ? 'Today' : format(new Date(lead.meeting_date), 'd MMM')}
+                      {lead.meeting_slot ? ` · ${lead.meeting_slot.split(' ')[0]}` : ''}
+                    </span>
+                  )}
+                  {lead.sales_followup_date && (
+                    <span className={`text-xs px-2 py-1 rounded-md font-medium ${lead.sales_followup_date === today ? 'bg-purple-50 text-purple-700' : 'bg-slate-50 text-slate-500'}`}>
+                      Followup: {lead.sales_followup_date === today ? 'Today' : format(new Date(lead.sales_followup_date), 'd MMM')}
+                    </span>
+                  )}
+                  {lead.sales_quoted_amount && (
+                    <span className="text-xs px-2 py-1 rounded-md bg-green-50 text-green-700">
+                      ₹{Number(lead.sales_quoted_amount).toLocaleString('en-IN')}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
 
-                    {/* g:0 Lead Info */}
-                    <td className="px-3 py-2.5" style={{ width: 180, minWidth: 180 }}>
-                      <div className="font-medium text-slate-800 text-sm truncate">{lead.name ?? '—'}</div>
-                      <div className="text-xs text-slate-400">{formatPhone(lead.phone)}</div>
-                    </td>
-                    <td className="px-3 py-2.5" style={{ width: 90, minWidth: 90 }}>
-                      <span className="text-xs text-slate-600">{lead.city ?? '—'}</span>
-                    </td>
-                    <td className="px-3 py-2.5" style={{ width: 110, minWidth: 110 }}>
-                      <span className="text-xs text-slate-500 truncate block">{lead.lead_source ?? '—'}</span>
-                    </td>
-                    <td className="px-3 py-2.5" style={{ width: 100, minWidth: 100 }}>
-                      <span className="text-xs text-slate-500">{lead.presales_name?.split(' ')[0] ?? '—'}</span>
-                    </td>
-
-                    {/* g:1 Sales */}
-                    <td className="px-3 py-2.5" style={{ width: 100, minWidth: 100 }}>
-                      <span className="text-xs text-slate-600 font-medium">{lead.sales_name?.split(' ')[0] ?? '—'}</span>
-                    </td>
-                    <td className="px-3 py-2.5" style={{ width: 110, minWidth: 110 }}>
-                      {lead.meeting_date ? (
-                        <div>
-                          <span className={`text-xs font-semibold ${isToday ? 'text-blue-600' : isPast ? 'text-amber-600' : 'text-slate-600'
-                            }`}>
-                            {isToday ? 'Today' : format(new Date(lead.meeting_date), 'd MMM')}
-                          </span>
-                        </div>
-                      ) : <span className="text-slate-300 text-xs">—</span>}
-                    </td>
-                    <td className="px-3 py-2.5" style={{ width: 130, minWidth: 130 }}>
-                      <span className="text-xs text-slate-500">{lead.meeting_slot ?? '—'}</span>
-                    </td>
-                    <td className="px-3 py-2.5" style={{ width: 120, minWidth: 120 }}>
-                      {lead.sales_meeting_status ? (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border"
-                          style={{ background: mtgStyle?.bg, color: mtgStyle?.text, borderColor: mtgStyle?.border }}>
-                          {getMtgStatusLabel(lead.sales_meeting_status)}
-                        </span>
+      {/* Desktop table view */}
+      <div className="hidden lg:block">
+        {/* Table */}
+        <div className="card p-0 rounded-xl border border-slate-200" style={{ overflowX: 'auto' }}>
+          <div style={{ overflowY: 'auto', maxHeight: 'calc(100vh - 280px)' }}>
+            <table style={{ minWidth: totalW, width: '100%', borderCollapse: 'collapse' }}>
+              <thead className="sticky top-0 z-10">
+                {/* Group headers */}
+                <tr>
+                  {G_LABELS.map((label, i) => (
+                    <th key={label} colSpan={G_SPANS[i]}
+                      style={{ background: G_COLORS[i] }}
+                      className="px-3 py-1.5 text-center text-xs font-bold text-white tracking-wide border-r-2 border-white/30 last:border-0">
+                      {label}
+                    </th>
+                  ))}
+                </tr>
+                {/* Column headers */}
+                <tr className="bg-slate-50 border-b border-slate-200">
+                  {visibleCols.map(col => (
+                    <th key={col.key}
+                      style={{ width: col.w, minWidth: col.w, borderTop: `2px solid ${G_COLORS[col.g]}` }}
+                      className="px-3 py-2 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap relative group bg-slate-50">
+                      {col.key === '_select' ? (
+                        (isManager || isSuperAdmin) ? (
+                          <input type="checkbox"
+                            checked={sorted.length > 0 && selectedIds.size === sorted.length}
+                            onChange={toggleSelectAll}
+                            className="w-3.5 h-3.5 rounded cursor-pointer" />
+                        ) : null
                       ) : (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-500 border border-slate-200">
-                          Scheduled
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2.5" style={{ width: 200, minWidth: 200 }}>
-                      {lead.sales_outcome ? (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border"
-                          style={{ background: outcomeStyle?.bg, color: outcomeStyle?.text, borderColor: outcomeStyle?.border }}>
-                          {OUTCOME_LABELS[lead.sales_outcome] || lead.sales_outcome}
-                        </span>
-                      ) : <span className="text-slate-300 text-xs">—</span>}
-                    </td>
-                    <td className="px-3 py-2.5" style={{ width: 100, minWidth: 100 }}>
-                      {lead.sales_lead_status ? (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border capitalize"
-                          style={{ background: statusStyle?.bg, color: statusStyle?.text, borderColor: statusStyle?.border }}>
-                          {lead.sales_lead_status.replace('_', ' ')}
-                        </span>
-                      ) : <span className="text-slate-300 text-xs">—</span>}
-                    </td>
-                    <td className="px-3 py-2.5" style={{ width: 100, minWidth: 100 }}>
-                      {lead.sales_followup_date ? (
-                        <div>
-                          <span className={`text-xs font-medium ${lead.sales_followup_date === today ? 'text-blue-600' :
-                            lead.sales_followup_date < today ? 'text-amber-600' : 'text-slate-500'
-                            }`}>
-                            {lead.sales_followup_date === today ? 'Today' : format(new Date(lead.sales_followup_date), 'd MMM')}
+                        <div className="flex items-center gap-1">
+                          <span className={col.sortable ? 'cursor-pointer hover:text-slate-800 select-none' : ''}
+                            onClick={() => col.sortable && toggleSort(col.key)}>
+                            {col.label}
+                            {sortCol === col.key && (
+                              <span style={{ color: G_COLORS[col.g] }}>{sortDir === 'asc' ? ' ↑' : ' ↓'}</span>
+                            )}
                           </span>
+                          <button onClick={() => setFilterOpen(filterOpen === col.key ? null : col.key)}
+                            className={`ml-auto p-0.5 rounded flex-shrink-0 transition-colors ${filters[col.key] ? 'text-blue-500' : 'text-slate-300 hover:text-slate-500 opacity-0 group-hover:opacity-100'
+                              }`}>
+                            <Filter size={10} />
+                          </button>
                         </div>
-                      ) : <span className="text-slate-300 text-xs">—</span>}
-                    </td>
-                    <td className="px-3 py-2.5" style={{ width: 100, minWidth: 100 }}>
-                      {lead.sales_quoted_amount ? (
-                        <span className="text-xs font-semibold text-green-700">
-                          ₹{Number(lead.sales_quoted_amount).toLocaleString('en-IN')}
-                        </span>
-                      ) : <span className="text-slate-300 text-xs">—</span>}
-                    </td>
+                      )}
+                      {col.key !== '_select' && filterOpen === col.key && (
+                        <ColFilterPopup col={col}
+                          value={filters[col.key]}
+                          onApply={f => { setFilters(p => ({ ...p, [col.key]: f })); setFilterOpen(null) }}
+                          onClear={() => { setFilters(p => { const n = { ...p }; delete n[col.key]; return n }); setFilterOpen(null) }}
+                          onClose={() => setFilterOpen(null)} />
+                      )}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
 
-                    {/* g:2 Property Details */}
-                    <td className="px-3 py-2.5" style={{ width: 110, minWidth: 110 }}>
-                      <span className="text-xs text-slate-600">{lead.property_type ?? '—'}</span>
-                    </td>
-                    <td className="px-3 py-2.5" style={{ width: 110, minWidth: 110 }}>
-                      <span className="text-xs text-slate-600">{lead.ownership ?? '—'}</span>
-                    </td>
-                    <td className="px-3 py-2.5" style={{ width: 130, minWidth: 130 }}>
-                      <span className="text-xs text-slate-600">{lead.roof_type ?? '—'}</span>
-                    </td>
-                    <td className="px-3 py-2.5" style={{ width: 90, minWidth: 90 }}>
-                      <span className="text-xs text-slate-600">{lead.roof_area ? `${lead.roof_area} sqft` : '—'}</span>
-                    </td>
-                    <td className="px-3 py-2.5" style={{ width: 80, minWidth: 80 }}>
-                      <span className="text-xs text-slate-600">{lead.sanctioned_load ? `${lead.sanctioned_load} kW` : '—'}</span>
-                    </td>
-                    <td className="px-3 py-2.5" style={{ width: 80, minWidth: 80 }}>
-                      <span className="text-xs text-slate-600">{lead.monthly_bill ? `₹${lead.monthly_bill}` : '—'}</span>
-                    </td>
-                    <td className="px-3 py-2.5" style={{ width: 80, minWidth: 80 }}>
-                      <span className="text-xs text-slate-600">{lead.units_per_month ? `${lead.units_per_month}` : '—'}</span>
-                    </td>
-                    <td className="px-3 py-2.5" style={{ width: 100, minWidth: 100 }}>
-                      <span className="text-xs text-slate-600">{lead.electricity_board ?? '—'}</span>
-                    </td>
-                    <td className="px-3 py-2.5" style={{ width: 90, minWidth: 90 }}>
-                      <span className="text-xs text-slate-600">{lead.system_size_kw ? `${lead.system_size_kw} kW` : '—'}</span>
-                    </td>
-                    <td className="px-3 py-2.5" style={{ width: 100, minWidth: 100 }}>
-                      <span className="text-xs text-slate-600">{lead.system_type ?? '—'}</span>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
+              <tbody>
+                {loading ? (
+                  <tr><td colSpan={COLS.length} className="py-16 text-center"><Spinner size={20} /></td></tr>
+                ) : sorted.length === 0 ? (
+                  <tr><td colSpan={COLS.length} className="py-16 text-center text-sm text-slate-400">No leads found</td></tr>
+                ) : sorted.map(lead => {
+                  const isToday = lead.meeting_date === today
+                  const isPast = lead.meeting_date < today
+                  const outcomeStyle = getOutcomeStyle(lead.sales_outcome)
+                  const statusStyle = lead.sales_lead_status ? getLeadStatusStyle(lead.sales_lead_status) : null
+                  const mtgStyle = lead.sales_meeting_status ? getMtgStatusStyle(lead.sales_meeting_status) : null
+
+                  return (
+                    <tr key={lead.id}
+                      className={`border-b border-slate-100 hover:bg-slate-50 cursor-pointer ${selectedIds.has(lead.id) ? 'bg-blue-50/40' : isToday ? 'bg-blue-50/30' : isPast && !lead.sales_outcome ? 'bg-amber-50/30' : ''
+                        }`}
+                      onClick={() => navigate(`/leads/${lead.id}`)}>
+
+                      {/* Checkbox */}
+                      {(isManager || isSuperAdmin) && (
+                        <td className="px-3 py-2.5" style={{ width: 36, minWidth: 36 }}
+                          onClick={e => { e.stopPropagation(); e.preventDefault(); toggleSelect(lead.id) }}>
+                          <input type="checkbox"
+                            checked={selectedIds.has(lead.id)}
+                            onChange={e => { e.stopPropagation(); toggleSelect(lead.id) }}
+                            onClick={e => e.stopPropagation()}
+                            className="w-3.5 h-3.5 rounded cursor-pointer" />
+                        </td>
+                      )}
+
+                      {/* g:0 Lead Info */}
+                      <td className="px-3 py-2.5" style={{ width: 180, minWidth: 180 }}>
+                        <div className="font-medium text-slate-800 text-sm truncate">{lead.name ?? '—'}</div>
+                        <div className="text-xs text-slate-400">{formatPhone(lead.phone)}</div>
+                      </td>
+                      <td className="px-3 py-2.5" style={{ width: 90, minWidth: 90 }}>
+                        <span className="text-xs text-slate-600">{lead.city ?? '—'}</span>
+                      </td>
+                      <td className="px-3 py-2.5" style={{ width: 110, minWidth: 110 }}>
+                        <span className="text-xs text-slate-500 truncate block">{lead.lead_source ?? '—'}</span>
+                      </td>
+                      <td className="px-3 py-2.5" style={{ width: 100, minWidth: 100 }}>
+                        <span className="text-xs text-slate-500">{lead.presales_name?.split(' ')[0] ?? '—'}</span>
+                      </td>
+
+                      {/* g:1 Sales */}
+                      <td className="px-3 py-2.5" style={{ width: 100, minWidth: 100 }}>
+                        <span className="text-xs text-slate-600 font-medium">{lead.sales_name?.split(' ')[0] ?? '—'}</span>
+                      </td>
+                      <td className="px-3 py-2.5" style={{ width: 110, minWidth: 110 }}>
+                        {lead.meeting_date ? (
+                          <div>
+                            <span className={`text-xs font-semibold ${isToday ? 'text-blue-600' : isPast ? 'text-amber-600' : 'text-slate-600'
+                              }`}>
+                              {isToday ? 'Today' : format(new Date(lead.meeting_date), 'd MMM')}
+                            </span>
+                          </div>
+                        ) : <span className="text-slate-300 text-xs">—</span>}
+                      </td>
+                      <td className="px-3 py-2.5" style={{ width: 130, minWidth: 130 }}>
+                        <span className="text-xs text-slate-500">{lead.meeting_slot ?? '—'}</span>
+                      </td>
+                      <td className="px-3 py-2.5" style={{ width: 120, minWidth: 120 }}>
+                        {lead.sales_meeting_status ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border"
+                            style={{ background: mtgStyle?.bg, color: mtgStyle?.text, borderColor: mtgStyle?.border }}>
+                            {getMtgStatusLabel(lead.sales_meeting_status)}
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-500 border border-slate-200">
+                            Scheduled
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5" style={{ width: 200, minWidth: 200 }}>
+                        {lead.sales_outcome ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border"
+                            style={{ background: outcomeStyle?.bg, color: outcomeStyle?.text, borderColor: outcomeStyle?.border }}>
+                            {OUTCOME_LABELS[lead.sales_outcome] || lead.sales_outcome}
+                          </span>
+                        ) : lead.stage === 'qc_followup' ? (
+                          <span className="text-xs font-medium px-2 py-0.5 rounded-full border bg-purple-50 text-purple-700 border-purple-200">
+                            📞 Rearrange Meeting
+                          </span>
+                        ) : <span className="text-slate-300 text-xs">—</span>}
+                      </td>
+                      <td className="px-3 py-2.5" style={{ width: 100, minWidth: 100 }}>
+                        {lead.sales_lead_status ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border capitalize"
+                            style={{ background: statusStyle?.bg, color: statusStyle?.text, borderColor: statusStyle?.border }}>
+                            {lead.sales_lead_status.replace('_', ' ')}
+                          </span>
+                        ) : <span className="text-slate-300 text-xs">—</span>}
+                      </td>
+                      <td className="px-3 py-2.5" style={{ width: 100, minWidth: 100 }}>
+                        {lead.sales_followup_date ? (
+                          <div>
+                            <span className={`text-xs font-medium ${lead.sales_followup_date === today ? 'text-blue-600' :
+                              lead.sales_followup_date < today ? 'text-amber-600' : 'text-slate-500'
+                              }`}>
+                              {lead.sales_followup_date === today ? 'Today' : format(new Date(lead.sales_followup_date), 'd MMM')}
+                            </span>
+                          </div>
+                        ) : <span className="text-slate-300 text-xs">—</span>}
+                      </td>
+                      <td className="px-3 py-2.5" style={{ width: 100, minWidth: 100 }}>
+                        {lead.sales_quoted_amount ? (
+                          <span className="text-xs font-semibold text-green-700">
+                            ₹{Number(lead.sales_quoted_amount).toLocaleString('en-IN')}
+                          </span>
+                        ) : <span className="text-slate-300 text-xs">—</span>}
+                      </td>
+
+                      {/* g:2 Property Details */}
+                      <td className="px-3 py-2.5" style={{ width: 110, minWidth: 110 }}>
+                        <span className="text-xs text-slate-600">{lead.property_type ?? '—'}</span>
+                      </td>
+                      <td className="px-3 py-2.5" style={{ width: 110, minWidth: 110 }}>
+                        <span className="text-xs text-slate-600">{lead.ownership ?? '—'}</span>
+                      </td>
+                      <td className="px-3 py-2.5" style={{ width: 130, minWidth: 130 }}>
+                        <span className="text-xs text-slate-600">{lead.roof_type ?? '—'}</span>
+                      </td>
+                      <td className="px-3 py-2.5" style={{ width: 90, minWidth: 90 }}>
+                        <span className="text-xs text-slate-600">{lead.roof_area ? `${lead.roof_area} sqft` : '—'}</span>
+                      </td>
+                      <td className="px-3 py-2.5" style={{ width: 80, minWidth: 80 }}>
+                        <span className="text-xs text-slate-600">{lead.sanctioned_load ? `${lead.sanctioned_load} kW` : '—'}</span>
+                      </td>
+                      <td className="px-3 py-2.5" style={{ width: 80, minWidth: 80 }}>
+                        <span className="text-xs text-slate-600">{lead.monthly_bill ? `₹${lead.monthly_bill}` : '—'}</span>
+                      </td>
+                      <td className="px-3 py-2.5" style={{ width: 80, minWidth: 80 }}>
+                        <span className="text-xs text-slate-600">{lead.units_per_month ? `${lead.units_per_month}` : '—'}</span>
+                      </td>
+                      <td className="px-3 py-2.5" style={{ width: 100, minWidth: 100 }}>
+                        <span className="text-xs text-slate-600">{lead.electricity_board ?? '—'}</span>
+                      </td>
+                      <td className="px-3 py-2.5" style={{ width: 90, minWidth: 90 }}>
+                        <span className="text-xs text-slate-600">{lead.system_size_kw ? `${lead.system_size_kw} kW` : '—'}</span>
+                      </td>
+                      <td className="px-3 py-2.5" style={{ width: 100, minWidth: 100 }}>
+                        <span className="text-xs text-slate-600">{lead.system_type ?? '—'}</span>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
       <SalesBulkEditModal
@@ -697,7 +785,6 @@ function SalesBulkEditModal({ open, onClose, selectedIds, onDone }) {
     meeting_date: '',
     meeting_slot: '',
     sales_outcome: '',
-    sales_lead_status: '',
     sales_followup_date: '',
     sales_followup_slot: '',
   })
@@ -708,20 +795,28 @@ function SalesBulkEditModal({ open, onClose, selectedIds, onDone }) {
     '3:00 PM - 4:00 PM', '4:00 PM - 5:00 PM', '5:00 PM - 6:00 PM', '6:00 PM - 7:00 PM',
   ]
 
+  // Exact same list as LeadProfilePage SALES_OUTCOMES — same value + same label
   const OUTCOMES = [
-    { value: 'call_not_connected_1', label: 'Not Connected - 1st' },
-    { value: 'call_not_connected_2', label: 'Not Connected - 2nd' },
-    { value: 'call_not_connected_3', label: 'Not Connected - 3rd' },
-    { value: 'call_later_interested', label: 'Call Later (Interested)' },
-    { value: 'call_later_underconstruction', label: 'Call Later (UC)' },
-    { value: 'meeting_rescheduled', label: 'Meeting Rescheduled' },
-    { value: 'meeting_done_hot', label: 'HOT 🔥' },
-    { value: 'meeting_done_moderate', label: 'MODERATE 🌡️' },
-    { value: 'meeting_done_cold', label: 'COLD ❄️' },
-    { value: 'meeting_done_order_closed', label: 'ORDER CLOSED 🎉' },
-    { value: 'not_interested', label: 'Not Interested' },
-    { value: 'non_qualified_roof', label: 'NQ - Roof' },
-    { value: 'non_qualified_bill', label: 'NQ - Bill' },
+    { value: 'call_not_connected_1', label: 'Call Not Connected - 1st', leadStatus: 'pending', meetingStatus: 'meeting_not_done' },
+    { value: 'call_not_connected_2', label: 'Call Not Connected - 2nd', leadStatus: 'pending', meetingStatus: 'meeting_not_done' },
+    { value: 'call_not_connected_3', label: 'Call Not Connected - 3rd', leadStatus: 'pending', meetingStatus: 'meeting_not_done' },
+    { value: 'invalid_number', label: 'Invalid Number', leadStatus: 'pending', meetingStatus: 'meeting_not_done' },
+    { value: 'call_later_interested', label: 'Call Later (Interested)', leadStatus: 'pending', meetingStatus: 'meeting_pending' },
+    { value: 'meeting_rescheduled', label: 'Meeting Rescheduled 📅', leadStatus: 'pending', meetingStatus: 'meeting_pending' },
+    { value: 'call_later_underconstruction', label: 'Call Later (Under Construction)', leadStatus: 'pending', meetingStatus: 'meeting_pending' },
+    { value: 'meeting_done_hot', label: 'Meeting Done — HOT 🔥', leadStatus: 'follow_up', meetingStatus: 'meeting_done' },
+    { value: 'meeting_done_moderate', label: 'Meeting Done — MODERATE 🌡️', leadStatus: 'follow_up', meetingStatus: 'meeting_done' },
+    { value: 'meeting_done_cold', label: 'Meeting Done — COLD ❄️', leadStatus: 'follow_up', meetingStatus: 'meeting_done' },
+    { value: 'meeting_done_order_closed', label: 'Meeting Done — ORDER CLOSED 🎉', leadStatus: 'won', meetingStatus: 'meeting_done' },
+    { value: 'not_interested', label: 'Not Interested in Solar', leadStatus: 'lost', meetingStatus: 'meeting_done' },
+    { value: 'solarpro_enquiry', label: 'SolarPro Enquiry', leadStatus: 'lost', meetingStatus: 'meeting_done' },
+    { value: 'non_qualified_roof', label: 'Non Qualified - Roof Insufficient', leadStatus: 'lost', meetingStatus: 'meeting_done' },
+    { value: 'non_qualified_bill', label: 'Non Qualified - Bill Insufficient', leadStatus: 'lost', meetingStatus: 'meeting_done' },
+    { value: 'non_qualified_ownership', label: 'Non Qualified - No Roof Ownership', leadStatus: 'lost', meetingStatus: 'meeting_done' },
+    { value: 'non_qualified_not_govt_meter', label: 'Non Qualified - Not Govt Meter', leadStatus: 'lost', meetingStatus: 'meeting_done' },
+    { value: 'non_qualified_no_connection', label: 'Non Qualified - No Meter Connection', leadStatus: 'lost', meetingStatus: 'meeting_done' },
+    { value: 'not_serviceable_offgrid', label: 'Not Serviceable - Offgrid', leadStatus: 'lost', meetingStatus: 'meeting_done' },
+    { value: 'not_serviceable_location', label: 'Not Serviceable - Location', leadStatus: 'lost', meetingStatus: 'meeting_done' },
   ]
 
   useEffect(() => {
@@ -729,7 +824,7 @@ function SalesBulkEditModal({ open, onClose, selectedIds, onDone }) {
       supabase.from('users').select('id, name')
         .eq('role', 'sales_agent').eq('is_active', true).order('name')
         .then(({ data }) => setAgents(data ?? []))
-      setForm({ sales_agent_id: '', meeting_date: '', meeting_slot: '', sales_outcome: '', sales_lead_status: '', sales_followup_date: '', sales_followup_slot: '' })
+      setForm({ sales_agent_id: '', meeting_date: '', meeting_slot: '', sales_outcome: '', sales_followup_date: '', sales_followup_slot: '' })
     }
   }, [open])
 
@@ -741,8 +836,20 @@ function SalesBulkEditModal({ open, onClose, selectedIds, onDone }) {
     if (form.sales_agent_id) { updates.sales_agent_id = form.sales_agent_id; updates.assigned_to = form.sales_agent_id }
     if (form.meeting_date) updates.meeting_date = form.meeting_date
     if (form.meeting_slot) updates.meeting_slot = form.meeting_slot
-    if (form.sales_outcome) updates.sales_outcome = form.sales_outcome
-    if (form.sales_lead_status) updates.sales_lead_status = form.sales_lead_status
+    if (form.sales_outcome) {
+      updates.sales_outcome = form.sales_outcome
+      // Auto-derive lead_status and meeting_status — exact same as LeadProfilePage
+      const selected = OUTCOMES.find(o => o.value === form.sales_outcome)
+      if (selected) {
+        updates.sales_lead_status = selected.leadStatus
+        updates.sales_meeting_status = selected.meetingStatus
+      }
+      // ORDER CLOSED → stage move karo, exactly like LeadProfilePage
+      if (form.sales_outcome === 'meeting_done_order_closed') {
+        updates.stage = 'sale_closed'
+        updates.sale_closed_at = new Date().toISOString()
+      }
+    }
     if (form.sales_followup_date) updates.sales_followup_date = form.sales_followup_date
     if (form.sales_followup_slot) updates.sales_followup_slot = form.sales_followup_slot
 
@@ -794,6 +901,7 @@ function SalesBulkEditModal({ open, onClose, selectedIds, onDone }) {
               {TIME_SLOTS.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
           </div>
+
         </div>
         <div>
           <label className="label">Sales outcome</label>
@@ -801,16 +909,17 @@ function SalesBulkEditModal({ open, onClose, selectedIds, onDone }) {
             <option value="">— No change —</option>
             {OUTCOMES.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
-        </div>
-        <div>
-          <label className="label">Lead status</label>
-          <select className="select" value={form.sales_lead_status} onChange={e => set('sales_lead_status', e.target.value)}>
-            <option value="">— No change —</option>
-            <option value="pending">Pending</option>
-            <option value="follow_up">Follow Up</option>
-            <option value="won">Won</option>
-            <option value="lost">Lost</option>
-          </select>
+          {form.sales_outcome && (() => {
+            const sel = OUTCOMES.find(o => o.value === form.sales_outcome)
+            return sel ? (
+              <p className="text-xs text-slate-400 mt-1">
+                Lead status → <span className="font-medium text-slate-600">{sel.leadStatus}</span>
+                {form.sales_outcome === 'meeting_done_order_closed' && (
+                  <span className="ml-2 text-green-600 font-medium">· Stage → Sale Closed</span>
+                )}
+              </p>
+            ) : null
+          })()}
         </div>
       </div>
       <div className="flex gap-2 mt-5 pt-4 border-t border-slate-100">

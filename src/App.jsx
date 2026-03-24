@@ -15,6 +15,8 @@ import AmcPage from '@/pages/AmcPage'
 import UsersPage from '@/pages/UsersPage'
 import NotFoundPage from '@/pages/NotFoundPage'
 import BulkImportPage from '@/pages/BulkImportPage'
+import SalesApprovalPage from '@/pages/SalesApprovalPage'
+import PSDispositionApprovalsPage from '@/pages/PSDispositionApprovalsPage'
 
 function RequireAuth({ children }) {
   const { user, loading } = useAuth()
@@ -124,6 +126,22 @@ function AppRoutes() {
         <RequireAuth>
           <RequireRole roles={['super_admin', 'presales_manager']}>
             <BulkImportPage />
+          </RequireRole>
+        </RequireAuth>
+      } />
+
+      <Route path="/sales-approval" element={
+        <RequireAuth>
+          <RequireRole roles={['super_admin', 'sales_manager']}>
+            <SalesApprovalPage />
+          </RequireRole>
+        </RequireAuth>
+      } />
+
+      <Route path="/ps-disposition-approvals" element={
+        <RequireAuth>
+          <RequireRole roles={['super_admin', 'presales_manager']}>
+            <PSDispositionApprovalsPage />
           </RequireRole>
         </RequireAuth>
       } />
