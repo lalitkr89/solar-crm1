@@ -50,7 +50,7 @@ export default function SalesApprovalPage() {
       .select(`
         id, name, phone, city, stage,
         sales_quoted_amount, sale_closed_at, order_submitted_at,
-        order_approved_by, order_approved_at, order_rejected_reason,
+        order_approved_by, order_approved_at, order_rejected_reason, order_id,
         system_size_kw,
         sales_agent_id,
         order_details (
@@ -178,6 +178,11 @@ function OrderCard({ lead, canApprove, onView, onApprove, onReject }) {
             <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${statusBadge.bg} ${statusBadge.text} ${statusBadge.border}`}>
               {statusBadge.label}
             </span>
+            {lead.order_id && (
+              <span className="text-xs px-2 py-0.5 rounded-full border font-mono font-semibold bg-blue-50 text-blue-700 border-blue-200 tracking-wide">
+                🔖 {lead.order_id}
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-3 mt-1 flex-wrap">
             {od?.total_project_cost && (

@@ -4,7 +4,7 @@ import { AuthProvider, useAuth } from '@/context/AuthContext'
 // Pages
 import LoginPage from '@/pages/LoginPage'
 import DashboardPage from '@/pages/DashboardPage'
-import LeadProfilePage from '@/pages/LeadProfilePage'
+import LeadProfilePage from '@/pages/lead-profile/LeadProfilePage'
 import KanbanPage from '@/pages/KanbanPage'
 import TodayPage from '@/pages/TodayPage'
 import PresalesPage from '@/pages/PresalesPage'
