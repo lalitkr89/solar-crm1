@@ -1,6 +1,9 @@
-import { X } from 'lucide-react'
+import { useState } from 'react'
+import { X, Eye } from 'lucide-react'
 import { getDispositionStyle } from '@/config/dispositions'
 import { STAGES } from '@/config/stages'
+import { maskPhone, formatPhone } from '@/lib/phone'
+import { logActivity } from '@/lib/leadService'
 
 // ── Spinner ──────────────────────────────────────────────────
 export function Spinner({ size = 16 }) {
@@ -126,6 +129,53 @@ export function InfoRow({ label, value }) {
     <div className="flex justify-between py-1.5 border-b border-slate-50 last:border-0">
       <span className="text-xs text-slate-500">{label}</span>
       <span className="text-xs font-medium text-slate-700 text-right max-w-[55%]">{value}</span>
+    </div>
+  )
+}
+
+// ── PhoneRow — masked number with View button + activity log ──
+// Lead profile card mein phone masked dikhta hai.
+// "View" click => reveal + lead_history mein log.
+// Search bar & AddLead cleanPhone use karte hain — woh unaffected hain.
+export function PhoneRow({ label, phone, leadId, userId, userName }) {
+  const [revealed, setRevealed] = useState(false)
+  if (!phone) return null
+
+  async function handleView() {
+    setRevealed(true)
+    try {
+      await logActivity({
+        leadId,
+        action: `📞 Phone number viewed — ${label}`,
+        field: 'phone_view',
+        oldVal: null,
+        newVal: formatPhone(phone),
+        userId,
+        userName,
+      })
+    } catch (_) {
+      // log fail silently — number still reveals
+    }
+  }
+
+  return (
+    <div className="flex justify-between items-center py-1.5 border-b border-slate-50 last:border-0">
+      <span className="text-xs text-slate-500">{label}</span>
+      <div className="flex items-center gap-2">
+        <span className="text-xs font-medium text-slate-700 font-mono tracking-wide">
+          {revealed ? formatPhone(phone) : maskPhone(phone)}
+        </span>
+        {!revealed && (
+          <button
+            onClick={handleView}
+            title="Number dekhne ke liye click karein"
+            className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-blue-500 hover:text-blue-700 hover:bg-blue-50 transition-colors border border-blue-200"
+          >
+            <Eye size={11} />
+            <span className="text-[10px] font-semibold">View</span>
+          </button>
+        )}
+      </div>
     </div>
   )
 }

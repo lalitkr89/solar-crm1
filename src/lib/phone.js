@@ -31,3 +31,10 @@ export function waLink(phone) {
 export function callLink(phone) {
   return `tel:+91${cleanPhone(phone)}`
 }
+
+// Mask phone: show first 5 digits, hide last 5 → "+91 98765 XXXXX"
+export function maskPhone(phone) {
+  const p = cleanPhone(phone)
+  if (p.length === 10) return `+91 ${p.slice(0, 5)} XXXXX`
+  return '—'
+}

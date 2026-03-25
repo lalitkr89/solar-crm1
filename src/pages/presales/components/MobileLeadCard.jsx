@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import { DispBadge } from '@/components/ui'
-import { formatPhone } from '@/lib/phone'
+import { maskPhone } from '@/lib/phone'
 import { format } from 'date-fns'
 import { SALES_OUTCOME_LABELS } from '../config/constants'
 
@@ -42,7 +42,7 @@ export default function MobileLeadCard({ lead, today }) {
             <div className="min-w-0">
               <div className="text-sm font-medium text-slate-800 truncate">{lead.name ?? '—'}</div>
               <div className="text-xs text-slate-400 mt-0.5">
-                {formatPhone(lead.phone)} · {lead.city ?? '—'}
+                {maskPhone(lead.phone)} · {lead.city ?? '—'}
               </div>
             </div>
           </div>

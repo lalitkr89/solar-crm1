@@ -5,7 +5,7 @@ import Layout from '@/components/layout/Layout'
 import { MetricCard, StageBadge, DispBadge, Spinner, PageHeader, EmptyState } from '@/components/ui'
 import { supabase } from '@/lib/supabase'
 import { STAGES } from '@/config/stages'
-import { formatPhone } from '@/lib/phone'
+import { maskPhone } from '@/lib/phone'
 import { format, addDays, startOfDay } from 'date-fns'
 import { Phone, Calendar, RefreshCw, TrendingUp, Users, IndianRupee, ChevronRight } from 'lucide-react'
 
@@ -15,13 +15,13 @@ export default function DashboardPage() {
   if (!profile) return <Layout><div className="flex justify-center py-20"><Spinner size={24} /></div></Layout>
 
   // Route to correct dashboard based on role
-  if (role === 'presales_agent')   return <Layout><PresalesAgentDash profile={profile} /></Layout>
+  if (role === 'presales_agent') return <Layout><PresalesAgentDash profile={profile} /></Layout>
   if (role === 'presales_manager') return <Layout><PresalesManagerDash profile={profile} /></Layout>
-  if (role === 'sales_agent')      return <Layout><SalesAgentDash profile={profile} /></Layout>
-  if (role === 'sales_manager')    return <Layout><SalesManagerDash profile={profile} /></Layout>
+  if (role === 'sales_agent') return <Layout><SalesAgentDash profile={profile} /></Layout>
+  if (role === 'sales_manager') return <Layout><SalesManagerDash profile={profile} /></Layout>
   if (role === 'finance_agent' || role === 'finance_manager') return <Layout><FinanceDash profile={profile} role={role} /></Layout>
-  if (role === 'ops_agent' || role === 'ops_manager')         return <Layout><OpsDash profile={profile} role={role} /></Layout>
-  if (role === 'amc_agent' || role === 'amc_manager')         return <Layout><AmcDash profile={profile} role={role} /></Layout>
+  if (role === 'ops_agent' || role === 'ops_manager') return <Layout><OpsDash profile={profile} role={role} /></Layout>
+  if (role === 'amc_agent' || role === 'amc_manager') return <Layout><AmcDash profile={profile} role={role} /></Layout>
   if (isSuperAdmin) return <Layout><SuperAdminDash profile={profile} /></Layout>
 
   return <Layout><p className="text-slate-400 p-4">Loading...</p></Layout>
@@ -85,7 +85,7 @@ function LeadMiniRow({ lead, onClick, showAgent = false }) {
       </div>
       <div className="flex-1 min-w-0">
         <div className="text-sm font-medium text-slate-800 truncate">{lead.name ?? '—'}</div>
-        <div className="text-xs text-slate-400">{formatPhone(lead.phone)} · {lead.city ?? '—'}</div>
+        <div className="text-xs text-slate-400">{maskPhone(lead.phone)} · {lead.city ?? '—'}</div>
       </div>
       <div className="flex flex-col items-end gap-0.5 flex-shrink-0">
         {lead.disposition && <DispBadge value={lead.disposition} />}
@@ -111,8 +111,8 @@ function LeadMiniRow({ lead, onClick, showAgent = false }) {
 //  1. PRE-SALES AGENT DASHBOARD
 // ════════════════════════════════════════════════════════════
 function PresalesAgentDash({ profile }) {
-  const navigate  = useNavigate()
-  const [leads,   setLeads]   = useState([])
+  const navigate = useNavigate()
+  const [leads, setLeads] = useState([])
   const [loading, setLoading] = useState(true)
   const [dateFilter, setDateFilter] = useState('')
   const today = format(new Date(), 'yyyy-MM-dd')
@@ -134,11 +134,11 @@ function PresalesAgentDash({ profile }) {
 
   useEffect(() => { load() }, [dateFilter])
 
-  const totalLeads     = leads.length
-  const callsToday     = leads.filter(l => l.calling_date === today).length
-  const meetingsToday  = leads.filter(l => l.meeting_date === today).length
+  const totalLeads = leads.length
+  const callsToday = leads.filter(l => l.calling_date === today).length
+  const meetingsToday = leads.filter(l => l.meeting_date === today).length
   const callbacksToday = leads.filter(l => l.callback_date === today).length
-  const newLeads       = leads.filter(l => l.stage === 'new').length
+  const newLeads = leads.filter(l => l.stage === 'new').length
 
   return (
     <>
@@ -201,8 +201,8 @@ function PresalesAgentDash({ profile }) {
 // ════════════════════════════════════════════════════════════
 function PresalesManagerDash({ profile }) {
   const navigate = useNavigate()
-  const [leads,   setLeads]   = useState([])
-  const [agents,  setAgents]  = useState([])
+  const [leads, setLeads] = useState([])
+  const [agents, setAgents] = useState([])
   const [loading, setLoading] = useState(true)
   const [dateFilter, setDateFilter] = useState('')
   const today = format(new Date(), 'yyyy-MM-dd')
@@ -229,9 +229,9 @@ function PresalesManagerDash({ profile }) {
 
   useEffect(() => { load() }, [dateFilter])
 
-  const totalLeads     = leads.length
-  const callsToday     = leads.filter(l => l.calling_date === today).length
-  const meetingsToday  = leads.filter(l => l.meeting_date === today).length
+  const totalLeads = leads.length
+  const callsToday = leads.filter(l => l.calling_date === today).length
+  const meetingsToday = leads.filter(l => l.meeting_date === today).length
   const callbacksToday = leads.filter(l => l.callback_date === today).length
 
   // Next 7 days meetings
@@ -246,10 +246,10 @@ function PresalesManagerDash({ profile }) {
     const agentLeads = leads.filter(l => l.assigned_to === agent.id)
     return {
       ...agent,
-      total:    agentLeads.length,
-      calls:    agentLeads.filter(l => l.calling_date === today).length,
+      total: agentLeads.length,
+      calls: agentLeads.filter(l => l.calling_date === today).length,
       meetings: agentLeads.filter(l => l.meeting_date === today).length,
-      callbacks:agentLeads.filter(l => l.callback_date === today).length,
+      callbacks: agentLeads.filter(l => l.callback_date === today).length,
     }
   })
 
@@ -269,7 +269,7 @@ function PresalesManagerDash({ profile }) {
       {/* Metrics */}
       <div className="grid grid-cols-4 gap-3 mb-5">
         <MetricCard label="Total leads" value={loading ? '—' : totalLeads} sub="In pipeline" />
-        <MetricCard label="Calls today" value={loading ? '—' : callsToday} sub="Made today" subColor="text-blue-500"/>
+        <MetricCard label="Calls today" value={loading ? '—' : callsToday} sub="Made today" subColor="text-blue-500" />
         <MetricCard label="Callbacks today" value={loading ? '—' : callbacksToday}
           sub={callbacksToday > 0 ? 'Due today' : 'None due'}
           subColor={callbacksToday > 0 ? 'text-amber-500' : 'text-slate-400'} />
@@ -345,9 +345,9 @@ function PresalesManagerDash({ profile }) {
             <button onClick={() => navigate('/presales')} className="text-xs text-blue-600 hover:underline">All leads →</button>
           </div>
           {loading ? <div className="flex justify-center py-8"><Spinner /></div>
-          : leads.slice(0, 6).map(l =>
-            <LeadMiniRow key={l.id} lead={l} showAgent onClick={() => navigate(`/leads/${l.id}`)} />
-          )}
+            : leads.slice(0, 6).map(l =>
+              <LeadMiniRow key={l.id} lead={l} showAgent onClick={() => navigate(`/leads/${l.id}`)} />
+            )}
         </div>
       </div>
     </>
@@ -359,7 +359,7 @@ function PresalesManagerDash({ profile }) {
 // ════════════════════════════════════════════════════════════
 function SalesAgentDash({ profile }) {
   const navigate = useNavigate()
-  const [leads,   setLeads]   = useState([])
+  const [leads, setLeads] = useState([])
   const [loading, setLoading] = useState(true)
   const today = format(new Date(), 'yyyy-MM-dd')
 
@@ -377,8 +377,8 @@ function SalesAgentDash({ profile }) {
 
   useEffect(() => { load() }, [])
 
-  const todayMtg    = leads.filter(l => l.meeting_date === today)
-  const upcoming    = leads.filter(l => l.meeting_date > today)
+  const todayMtg = leads.filter(l => l.meeting_date === today)
+  const upcoming = leads.filter(l => l.meeting_date > today)
   const pendingOutcome = leads.filter(l => l.meeting_date < today)
 
   return (
@@ -439,7 +439,7 @@ function SalesAgentDash({ profile }) {
 // ════════════════════════════════════════════════════════════
 function SalesManagerDash({ profile }) {
   const navigate = useNavigate()
-  const [leads,   setLeads]   = useState([])
+  const [leads, setLeads] = useState([])
   const [loading, setLoading] = useState(true)
   const today = format(new Date(), 'yyyy-MM-dd')
 
@@ -456,8 +456,8 @@ function SalesManagerDash({ profile }) {
 
   useEffect(() => { load() }, [])
 
-  const unassigned  = leads.filter(l => !l.sales_agent_id && l.stage === 'meeting_scheduled')
-  const todayMtg    = leads.filter(l => l.meeting_date === today)
+  const unassigned = leads.filter(l => !l.sales_agent_id && l.stage === 'meeting_scheduled')
+  const todayMtg = leads.filter(l => l.meeting_date === today)
   const next7 = Array.from({ length: 7 }, (_, i) => {
     const d = format(addDays(new Date(), i), 'yyyy-MM-dd')
     const label = i === 0 ? 'Today' : format(addDays(new Date(), i), 'EEE d MMM')
@@ -506,9 +506,9 @@ function SalesManagerDash({ profile }) {
             <button onClick={() => navigate('/sales')} className="text-xs text-blue-600 hover:underline">Manage →</button>
           </div>
           {loading ? <div className="flex justify-center py-8"><Spinner /></div>
-          : todayMtg.length === 0
-            ? <EmptyState icon={Calendar} title="No meetings today" />
-            : todayMtg.map(l => <LeadMiniRow key={l.id} lead={l} showAgent onClick={() => navigate(`/leads/${l.id}`)} />)
+            : todayMtg.length === 0
+              ? <EmptyState icon={Calendar} title="No meetings today" />
+              : todayMtg.map(l => <LeadMiniRow key={l.id} lead={l} showAgent onClick={() => navigate(`/leads/${l.id}`)} />)
           }
         </div>
       </div>
@@ -521,9 +521,9 @@ function SalesManagerDash({ profile }) {
 // ════════════════════════════════════════════════════════════
 function FinanceDash({ profile, role }) {
   const navigate = useNavigate()
-  const [leads,    setLeads]    = useState([])
+  const [leads, setLeads] = useState([])
   const [payments, setPayments] = useState([])
-  const [loading,  setLoading]  = useState(true)
+  const [loading, setLoading] = useState(true)
 
   async function load() {
     setLoading(true)
@@ -561,7 +561,7 @@ function FinanceDash({ profile, role }) {
         <MetricCard label="Leads in finance" value={loading ? '—' : leads.length} sub="Pending approval" />
         <MetricCard label="Pending payments" value={loading ? '—' : payments.length} sub="Milestones due" subColor="text-amber-500" />
         <MetricCard label="Amount pending"
-          value={loading ? '—' : `₹${(totalPending/100000).toFixed(1)}L`}
+          value={loading ? '—' : `₹${(totalPending / 100000).toFixed(1)}L`}
           sub="Total collection due" subColor="text-red-500" />
       </div>
 
@@ -570,21 +570,21 @@ function FinanceDash({ profile, role }) {
           <h2>Leads awaiting payment</h2>
         </div>
         {loading ? <div className="flex justify-center py-8"><Spinner /></div>
-        : leads.map(l => (
-          <div key={l.id} className="flex items-center gap-3 px-4 py-3 border-b border-slate-100 hover:bg-slate-50 cursor-pointer last:border-0"
-            onClick={() => navigate(`/leads/${l.id}`)}>
-            <div className="flex-1">
-              <div className="text-sm font-medium text-slate-800">{l.name}</div>
-              <div className="text-xs text-slate-400">{formatPhone(l.phone)} · {l.city}</div>
-            </div>
-            <div className="text-right">
-              <div className="text-sm font-semibold text-slate-800">
-                {l.quoted_amount ? `₹${Number(l.quoted_amount).toLocaleString('en-IN')}` : '—'}
+          : leads.map(l => (
+            <div key={l.id} className="flex items-center gap-3 px-4 py-3 border-b border-slate-100 hover:bg-slate-50 cursor-pointer last:border-0"
+              onClick={() => navigate(`/leads/${l.id}`)}>
+              <div className="flex-1">
+                <div className="text-sm font-medium text-slate-800">{l.name}</div>
+                <div className="text-xs text-slate-400">{maskPhone(l.phone)} · {l.city}</div>
               </div>
-              <StageBadge stage={l.stage} />
+              <div className="text-right">
+                <div className="text-sm font-semibold text-slate-800">
+                  {l.quoted_amount ? `₹${Number(l.quoted_amount).toLocaleString('en-IN')}` : '—'}
+                </div>
+                <StageBadge stage={l.stage} />
+              </div>
             </div>
-          </div>
-        ))}
+          ))}
       </div>
     </>
   )
@@ -595,7 +595,7 @@ function FinanceDash({ profile, role }) {
 // ════════════════════════════════════════════════════════════
 function OpsDash({ profile, role }) {
   const navigate = useNavigate()
-  const [leads,   setLeads]   = useState([])
+  const [leads, setLeads] = useState([])
   const [loading, setLoading] = useState(true)
 
   async function load() {
@@ -603,7 +603,7 @@ function OpsDash({ profile, role }) {
     const { data } = await supabase
       .from('leads')
       .select('id, name, phone, city, stage, updated_at')
-      .in('stage', ['finance_approval','ops_documents','name_load_change','net_metering','installation','installed'])
+      .in('stage', ['finance_approval', 'ops_documents', 'name_load_change', 'net_metering', 'installation', 'installed'])
       .order('updated_at', { ascending: false })
     setLeads(data ?? [])
     setLoading(false)
@@ -626,11 +626,11 @@ function OpsDash({ profile, role }) {
       <div className="grid grid-cols-3 lg:grid-cols-6 gap-3 mb-5">
         {[
           { stage: 'finance_approval', label: 'Finance approval' },
-          { stage: 'ops_documents',    label: 'Docs pending' },
+          { stage: 'ops_documents', label: 'Docs pending' },
           { stage: 'name_load_change', label: 'Name/load change' },
-          { stage: 'net_metering',     label: 'Net metering' },
-          { stage: 'installation',     label: 'Installation' },
-          { stage: 'installed',        label: 'Installed' },
+          { stage: 'net_metering', label: 'Net metering' },
+          { stage: 'installation', label: 'Installation' },
+          { stage: 'installed', label: 'Installed' },
         ].map(({ stage, label }) => (
           <MetricCard key={stage} label={label} value={loading ? '—' : byStage(stage)} sub="" />
         ))}
@@ -641,16 +641,16 @@ function OpsDash({ profile, role }) {
           <h2>All ops leads</h2>
         </div>
         {loading ? <div className="flex justify-center py-8"><Spinner /></div>
-        : leads.map(l => (
-          <div key={l.id} className="flex items-center gap-3 px-4 py-3 border-b border-slate-100 hover:bg-slate-50 cursor-pointer last:border-0"
-            onClick={() => navigate(`/leads/${l.id}`)}>
-            <div className="flex-1">
-              <div className="text-sm font-medium text-slate-800">{l.name}</div>
-              <div className="text-xs text-slate-400">{formatPhone(l.phone)} · {l.city}</div>
+          : leads.map(l => (
+            <div key={l.id} className="flex items-center gap-3 px-4 py-3 border-b border-slate-100 hover:bg-slate-50 cursor-pointer last:border-0"
+              onClick={() => navigate(`/leads/${l.id}`)}>
+              <div className="flex-1">
+                <div className="text-sm font-medium text-slate-800">{l.name}</div>
+                <div className="text-xs text-slate-400">{maskPhone(l.phone)} · {l.city}</div>
+              </div>
+              <StageBadge stage={l.stage} />
             </div>
-            <StageBadge stage={l.stage} />
-          </div>
-        ))}
+          ))}
       </div>
     </>
   )
@@ -661,7 +661,7 @@ function OpsDash({ profile, role }) {
 // ════════════════════════════════════════════════════════════
 function AmcDash({ profile, role }) {
   const navigate = useNavigate()
-  const [leads,   setLeads]   = useState([])
+  const [leads, setLeads] = useState([])
   const [loading, setLoading] = useState(true)
 
   async function load() {
@@ -695,16 +695,16 @@ function AmcDash({ profile, role }) {
       <div className="card p-0 overflow-hidden">
         <div className="px-4 py-3 border-b border-slate-100"><h2>All customers</h2></div>
         {loading ? <div className="flex justify-center py-8"><Spinner /></div>
-        : leads.map(l => (
-          <div key={l.id} className="flex items-center gap-3 px-4 py-3 border-b border-slate-100 hover:bg-slate-50 cursor-pointer last:border-0"
-            onClick={() => navigate(`/leads/${l.id}`)}>
-            <div className="flex-1">
-              <div className="text-sm font-medium text-slate-800">{l.name}</div>
-              <div className="text-xs text-slate-400">{formatPhone(l.phone)} · {l.city} · {l.system_size_kw ? `${l.system_size_kw} kW` : ''}</div>
+          : leads.map(l => (
+            <div key={l.id} className="flex items-center gap-3 px-4 py-3 border-b border-slate-100 hover:bg-slate-50 cursor-pointer last:border-0"
+              onClick={() => navigate(`/leads/${l.id}`)}>
+              <div className="flex-1">
+                <div className="text-sm font-medium text-slate-800">{l.name}</div>
+                <div className="text-xs text-slate-400">{maskPhone(l.phone)} · {l.city} · {l.system_size_kw ? `${l.system_size_kw} kW` : ''}</div>
+              </div>
+              <StageBadge stage={l.stage} />
             </div>
-            <StageBadge stage={l.stage} />
-          </div>
-        ))}
+          ))}
       </div>
     </>
   )
@@ -715,7 +715,7 @@ function AmcDash({ profile, role }) {
 // ════════════════════════════════════════════════════════════
 function SuperAdminDash({ profile }) {
   const navigate = useNavigate()
-  const [funnel,  setFunnel]  = useState([])
+  const [funnel, setFunnel] = useState([])
   const [loading, setLoading] = useState(true)
 
   async function load() {
@@ -748,8 +748,8 @@ function SuperAdminDash({ profile }) {
         <h2 className="mb-4">Full pipeline funnel</h2>
         {loading ? <Spinner /> : funnel.map(row => {
           const info = STAGES[row.stage]
-          const max  = funnel[0]?.lead_count ?? 1
-          const pct  = Math.round((row.lead_count / max) * 100)
+          const max = funnel[0]?.lead_count ?? 1
+          const pct = Math.round((row.lead_count / max) * 100)
           return (
             <div key={row.stage} className="flex items-center gap-3 py-1.5">
               <span className="text-xs text-slate-500 w-40 flex-shrink-0 truncate">{info?.label ?? row.stage}</span>

@@ -2,8 +2,8 @@ import { useState, useRef, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
 import Layout from '@/components/layout/Layout'
-import { PageHeader, StageBadge, DispBadge, Spinner, InfoRow } from '@/components/ui'
-import { formatPhone } from '@/lib/phone'
+import { PageHeader, StageBadge, DispBadge, Spinner, InfoRow, PhoneRow } from '@/components/ui'
+import { maskPhone } from '@/lib/phone'
 import { format } from 'date-fns'
 import { Clock, IndianRupee, History } from 'lucide-react'
 import { startLeadTimer, stopLeadTimer, getLeadTimeLogs, fmtSecs } from '@/lib/attendanceService'
@@ -128,7 +128,7 @@ export default function LeadProfilePage() {
               )}
             </div>
             <p className="text-sm text-slate-500 mt-0.5">
-              {formatPhone(lead.phone)} · {lead.city ?? '—'} · Added {lead.created_at ? format(new Date(lead.created_at), 'd MMM yyyy') : '—'}
+              {maskPhone(lead.phone)} · {lead.city ?? '—'} · Added {lead.created_at ? format(new Date(lead.created_at), 'd MMM yyyy') : '—'}
             </p>
           </div>
         </div>
@@ -157,8 +157,8 @@ export default function LeadProfilePage() {
         <div className="flex flex-col gap-4">
           <div className="card">
             <h3 className="mb-3">Contact details</h3>
-            <InfoRow label="Phone" value={formatPhone(lead.phone)} />
-            <InfoRow label="Alternate" value={lead.alternate_phone ? formatPhone(lead.alternate_phone) : null} />
+            <PhoneRow label="Phone" phone={lead.phone} leadId={id} userId={profile?.id} userName={profile?.name} />
+            <PhoneRow label="Alternate" phone={lead.alternate_phone} leadId={id} userId={profile?.id} userName={profile?.name} />
             <InfoRow label="Email" value={lead.email} />
             <InfoRow label="City" value={lead.city} />
             <InfoRow label="Pincode" value={lead.pincode} />
