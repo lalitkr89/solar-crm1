@@ -6,6 +6,7 @@ import { PageHeader, StageBadge, DispBadge, Spinner, InfoRow } from '@/component
 import { formatPhone } from '@/lib/phone'
 import { format } from 'date-fns'
 import { Clock, IndianRupee, History } from 'lucide-react'
+import { startLeadTimer, stopLeadTimer, getLeadTimeLogs, fmtSecs } from '@/lib/attendanceService'
 
 // ── Hooks ─────────────────────────────────────────────────────
 import { useLeadData } from "./hooks/useLeadData"
@@ -46,13 +47,21 @@ export default function LeadProfilePage() {
   const [showSalesOutcome, setShowSalesOutcome] = useState(false)
   const [showOrderDetails, setShowOrderDetails] = useState(false)
 
-  // ── Call timer ────────────────────────────────────────────
+  // ── Lead timer — logs to Supabase (presales only) ────────────
   const startRef = useRef(Date.now())
+  const logIdRef = useRef(null)
   const [elapsed, setElapsed] = useState(0)
   useEffect(() => {
+    const isPresalesRole = role === 'presales_agent' || role === 'presales_manager'
+    if (id && profile?.id && isPresalesRole) {
+      startLeadTimer(id, profile.id).then(logId => { logIdRef.current = logId })
+    }
     const t = setInterval(() => setElapsed(Math.floor((Date.now() - startRef.current) / 1000)), 1000)
-    return () => clearInterval(t)
-  }, [])
+    return () => {
+      clearInterval(t)
+      if (logIdRef.current) stopLeadTimer(logIdRef.current)
+    }
+  }, [id, profile?.id, role])
   const mins = String(Math.floor(elapsed / 60)).padStart(2, '0')
   const secs = String(elapsed % 60).padStart(2, '0')
 

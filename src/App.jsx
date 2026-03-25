@@ -17,6 +17,7 @@ import NotFoundPage from '@/pages/NotFoundPage'
 import BulkImportPage from '@/pages/BulkImportPage'
 import SalesApprovalPage from '@/pages/SalesApprovalPage'
 import PSDispositionApprovalsPage from '@/pages/PSDispositionApprovalsPage'
+import AttendancePage from '@/pages/AttendancePage'
 
 function RequireAuth({ children }) {
   const { user, loading } = useAuth()
@@ -142,6 +143,14 @@ function AppRoutes() {
         <RequireAuth>
           <RequireRole roles={['super_admin', 'presales_manager']}>
             <PSDispositionApprovalsPage />
+          </RequireRole>
+        </RequireAuth>
+      } />
+
+      <Route path="/attendance" element={
+        <RequireAuth>
+          <RequireRole roles={['super_admin', 'presales_manager']}>
+            <AttendancePage />
           </RequireRole>
         </RequireAuth>
       } />

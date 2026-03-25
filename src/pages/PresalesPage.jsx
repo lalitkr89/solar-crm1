@@ -3,7 +3,7 @@ import { useAuth } from '@/context/AuthContext'
 import Layout from '@/components/layout/Layout'
 import { PageHeader, Spinner } from '@/components/ui'
 import { format } from 'date-fns'
-import { Plus, RefreshCw, Phone, PhoneOff } from 'lucide-react'
+import { Plus, RefreshCw, Phone, PhoneOff, AlertTriangle, X } from 'lucide-react'
 
 // Hooks
 import { usePresalesLeads } from './presales/hooks/usePresalesLeads'
@@ -22,13 +22,26 @@ import LeadsTable from './presales/components/LeadsTable'
 import AddLeadModal from './presales/modals/AddLeadModal'
 import BulkEditModal from './presales/modals/BulkEditModal'
 
+// Status config for warning banner
+const STATUS_CONFIG = {
+  hold: { label: 'Hold', emoji: '⏸️', color: '#dc2626', bg: '#fee2e2', border: '#fca5a5' },
+  training: { label: 'Training', emoji: '📚', color: '#7c3aed', bg: '#ede9fe', border: '#c4b5fd' },
+  lunch: { label: 'Lunch Break', emoji: '🍽️', color: '#d97706', bg: '#fef3c7', border: '#fcd34d' },
+  snacks: { label: 'Snacks Break', emoji: '☕', color: '#0891b2', bg: '#cffafe', border: '#67e8f9' },
+}
+
 export default function PresalesPage() {
   const { profile, isManager, isSuperAdmin } = useAuth()
   const isAgent = !isManager && !isSuperAdmin
   const today = format(new Date(), 'yyyy-MM-dd')
 
   const { leads, loading, reload } = usePresalesLeads()
-  const { callingMode, queueLoading, handleStartCalling, handleStopCalling } = useCallingMode(profile?.id)
+  const {
+    callingMode, queueLoading,
+    handleStartCalling, handleStopCalling,
+    statusWarning, dismissWarning,
+  } = useCallingMode(profile?.id)
+
   const {
     globalSearch, setGlobalSearch,
     filters, filterOpen, setFilterOpen,
@@ -41,6 +54,8 @@ export default function PresalesPage() {
 
   const [showAdd, setShowAdd] = useState(false)
   const [showBulkEdit, setShowBulkEdit] = useState(false)
+
+  const warnCfg = statusWarning ? STATUS_CONFIG[statusWarning] : null
 
   return (
     <Layout>
@@ -70,6 +85,34 @@ export default function PresalesPage() {
           <Plus size={13} /> Add lead
         </button>
       </PageHeader>
+
+      {/* ── Status warning banner ── */}
+      {isAgent && statusWarning && warnCfg && (
+        <div
+          className="flex items-start gap-3 rounded-xl px-4 py-3 mb-3"
+          style={{
+            background: warnCfg.bg,
+            border: `1px solid ${warnCfg.border}`,
+            color: warnCfg.color,
+          }}
+        >
+          <AlertTriangle size={18} style={{ flexShrink: 0, marginTop: 1 }} />
+          <div className="flex-1">
+            <p className="text-sm font-semibold">
+              Abhi tumhara status <strong>{warnCfg.emoji} {warnCfg.label}</strong> hai
+            </p>
+            <p className="text-xs mt-0.5" style={{ color: warnCfg.color, opacity: 0.8 }}>
+              Calling shuru karne se pehle sidebar mein status <strong>🟢 Active</strong> karo.
+            </p>
+          </div>
+          <button
+            onClick={dismissWarning}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: warnCfg.color, opacity: 0.6, flexShrink: 0 }}
+          >
+            <X size={15} />
+          </button>
+        </div>
+      )}
 
       {callingMode && <CallingBanner onStop={handleStopCalling} />}
 

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
 import { supabase } from '@/lib/supabase'
@@ -6,7 +6,18 @@ import {
   LayoutDashboard, Kanban, Phone, Users, Wallet,
   HardHat, Shield, CalendarCheck, Zap, LogOut,
   UserCog, Upload, Menu, X, ClipboardCheck,
+  Activity, PauseCircle, BookOpen, UtensilsCrossed, Cookie, ClipboardList,
 } from 'lucide-react'
+import { useAttendance } from '@/hooks/useAttendance'
+import { STATUS_MAP, fmtSecs } from '@/lib/attendanceService'
+
+const STATUS_ICONS = {
+  active: Activity,
+  hold: PauseCircle,
+  training: BookOpen,
+  lunch: UtensilsCrossed,
+  snacks: Cookie,
+}
 
 const TEAM_COLOR = {
   presales: '#7F77DD',
@@ -16,9 +27,27 @@ const TEAM_COLOR = {
   amc: '#BA7517',
 }
 
-function NavContent({ onClose, profile, role, isSuperAdmin, isManager, onLogout, pendingCount = 0, pendingDispCount = 0 }) {
+function NavContent({ onClose, profile, role, isSuperAdmin, isManager, onLogout, pendingCount = 0, pendingDispCount = 0, attendance }) {
   const initial = profile?.name?.[0]?.toUpperCase() ?? '?'
   const teamColor = TEAM_COLOR[profile?.team] ?? '#378ADD'
+  const { isAgent, currentStatus, liveSecs, switching, statuses, handleSwitch } = attendance
+  const [statusOpen, setStatusOpen] = useState(false)
+  const dropdownRef = useRef(null)
+
+  const cfg = currentStatus ? STATUS_MAP[currentStatus] : null
+  const Icon = currentStatus ? STATUS_ICONS[currentStatus] : null
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    if (!statusOpen) return
+    function handleClick(e) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setStatusOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [statusOpen])
 
   return (
     <>
@@ -38,17 +67,149 @@ function NavContent({ onClose, profile, role, isSuperAdmin, isManager, onLogout,
         )}
       </div>
 
-      {/* User pill */}
-      <div className="mx-3 my-3 p-2.5 rounded-xl flex items-center gap-2.5"
-        style={{ background: 'rgba(255,255,255,0.06)' }}>
-        <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold text-white flex-shrink-0"
-          style={{ background: teamColor }}>
-          {initial}
-        </div>
-        <div className="min-w-0">
-          <div className="text-white text-xs font-medium truncate">{profile?.name ?? 'User'}</div>
-          <div className="text-white/40 text-xs truncate capitalize">{role?.replace('_', ' ')}</div>
-        </div>
+      {/* ── User card + Status dropdown ── */}
+      <div ref={dropdownRef} className="mx-3 my-3 relative">
+
+        {/* Clickable user card */}
+        <button
+          onClick={() => isAgent ? setStatusOpen(o => !o) : null}
+          style={{
+            width: '100%',
+            background: statusOpen ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.06)',
+            border: `1px solid ${cfg ? cfg.color + '55' : 'rgba(255,255,255,0.08)'}`,
+            borderRadius: 14,
+            padding: '10px 12px',
+            cursor: isAgent ? 'pointer' : 'default',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            transition: 'all 0.2s ease',
+          }}>
+
+          {/* Avatar with status glow ring */}
+          <div style={{ position: 'relative', flexShrink: 0 }}>
+            <div style={{
+              width: 32, height: 32, borderRadius: '50%',
+              background: teamColor,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 13, fontWeight: 700, color: '#fff',
+              boxShadow: cfg ? `0 0 0 2px #0B1F35, 0 0 0 4px ${cfg.color}` : 'none',
+              transition: 'box-shadow 0.3s ease',
+            }}>
+              {initial}
+            </div>
+            {/* Pulsing dot for active status */}
+            {cfg && (
+              <span style={{
+                position: 'absolute', bottom: 0, right: 0,
+                width: 9, height: 9, borderRadius: '50%',
+                background: cfg.color,
+                border: '2px solid #0B1F35',
+                display: 'block',
+              }} />
+            )}
+          </div>
+
+          {/* Name + status row */}
+          <div style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
+            <div style={{ color: '#fff', fontSize: 12, fontWeight: 600, lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {profile?.name ?? 'User'}
+            </div>
+            {isAgent && cfg ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
+                <span style={{ fontSize: 11, fontWeight: 600, color: cfg.color }}>
+                  {cfg.label}
+                </span>
+                <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', fontVariantNumeric: 'tabular-nums' }}>
+                  · {fmtSecs(liveSecs)}
+                </span>
+              </div>
+            ) : (
+              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginTop: 2, textTransform: 'capitalize' }}>
+                {role?.replace('_', ' ')}
+              </div>
+            )}
+          </div>
+
+          {/* Chevron */}
+          {isAgent && (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+              style={{ flexShrink: 0, transform: statusOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s ease' }}>
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          )}
+        </button>
+
+        {/* ── Dropdown panel ── */}
+        {isAgent && statusOpen && (
+          <div ref={dropdownRef} style={{
+            position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0, zIndex: 100,
+            background: '#0f2942',
+            border: '1px solid rgba(255,255,255,0.12)',
+            borderRadius: 14,
+            overflow: 'hidden',
+            boxShadow: '0 16px 40px rgba(0,0,0,0.5)',
+          }}>
+            <div style={{ padding: '8px 12px 6px', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.25)' }}>
+              Set Status
+            </div>
+            <div style={{ padding: '0 6px 6px' }}>
+              {statuses.map(s => {
+                const Ic = STATUS_ICONS[s.key]
+                const isActive = currentStatus === s.key
+                return (
+                  <button
+                    key={s.key}
+                    onClick={() => { handleSwitch(s.key); setStatusOpen(false) }}
+                    disabled={switching}
+                    style={{
+                      width: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      padding: '8px 10px',
+                      borderRadius: 10,
+                      border: 'none',
+                      background: isActive ? s.color + '22' : 'transparent',
+                      cursor: switching ? 'not-allowed' : 'pointer',
+                      opacity: switching && !isActive ? 0.5 : 1,
+                      transition: 'background 0.15s ease',
+                    }}>
+                    {/* Colored icon circle */}
+                    <span style={{
+                      width: 28, height: 28, borderRadius: 8, flexShrink: 0,
+                      background: isActive ? s.color : s.color + '20',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      transition: 'background 0.2s',
+                    }}>
+                      <Ic size={13} color={isActive ? '#fff' : s.color} />
+                    </span>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: isActive ? s.color : 'rgba(255,255,255,0.7)', flex: 1, textAlign: 'left' }}>
+                      {s.label}
+                    </span>
+                    {isActive && (
+                      <span style={{
+                        fontSize: 10, fontWeight: 700,
+                        color: s.color,
+                        background: s.color + '22',
+                        padding: '2px 7px',
+                        borderRadius: 20,
+                        fontVariantNumeric: 'tabular-nums',
+                      }}>
+                        {fmtSecs(liveSecs)}
+                      </span>
+                    )}
+                    {isActive && (
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={s.color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Nav */}
@@ -84,15 +245,21 @@ function NavContent({ onClose, profile, role, isSuperAdmin, isManager, onLogout,
               <Upload size={15} /> Bulk import
             </NavLink>
             {(role === 'presales_manager' || isSuperAdmin) && (
-              <NavLink to="/ps-disposition-approvals" onClick={onClose}
-                className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-                <ClipboardCheck size={15} /> Disposition Approvals
-                {pendingDispCount > 0 && (
-                  <span className="ml-auto bg-amber-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none">
-                    {pendingDispCount}
-                  </span>
-                )}
-              </NavLink>
+              <>
+                <NavLink to="/ps-disposition-approvals" onClick={onClose}
+                  className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+                  <ClipboardCheck size={15} /> Disposition Approvals
+                  {pendingDispCount > 0 && (
+                    <span className="ml-auto bg-amber-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none">
+                      {pendingDispCount}
+                    </span>
+                  )}
+                </NavLink>
+                <NavLink to="/attendance" onClick={onClose}
+                  className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+                  <ClipboardList size={15} /> Attendance
+                </NavLink>
+              </>
             )}
           </>
         )}
@@ -176,6 +343,7 @@ export default function Sidebar() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [pendingCount, setPendingCount] = useState(0)
   const [pendingDispCount, setPendingDispCount] = useState(0)
+  const attendance = useAttendance()
 
   useEffect(() => {
     if (role === 'sales_manager' || role === 'super_admin') {
@@ -195,6 +363,7 @@ export default function Sidebar() {
   }, [role])
 
   async function handleLogout() {
+    await attendance.handleClockOut()   // close attendance session
     await signOut()
     navigate('/login')
   }
@@ -204,6 +373,7 @@ export default function Sidebar() {
     onLogout: handleLogout,
     pendingCount,
     pendingDispCount,
+    attendance,
   }
 
   return (
