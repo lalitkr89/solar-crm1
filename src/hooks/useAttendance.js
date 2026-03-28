@@ -6,6 +6,7 @@ import {
   switchStatus,
   clockOut,
   ATTENDANCE_STATUSES,
+  trackActivity,
 } from '@/lib/attendanceService'
 
 /**
@@ -20,10 +21,10 @@ export function useAttendance() {
   const isAgent = isPresales && !isManager && !isSuperAdmin
 
   const [currentStatus, setCurrentStatus] = useState(null)   // 'active'|'hold'|...
-  const [statusSince,   setStatusSince]   = useState(null)   // when current status started
-  const [liveSecs,      setLiveSecs]      = useState(0)
-  const [switching,     setSwitching]     = useState(false)
-  const [ready,         setReady]         = useState(false)
+  const [statusSince, setStatusSince] = useState(null)   // when current status started
+  const [liveSecs, setLiveSecs] = useState(0)
+  const [switching, setSwitching] = useState(false)
+  const [ready, setReady] = useState(false)
   const timerRef = useRef(null)
 
   // ── Load today's attendance on mount ──────────────────────────
@@ -35,10 +36,11 @@ export function useAttendance() {
     if (!att) {
       // First login today — auto clock-in as active
       att = await clockIn(profile.id, profile.id)
+      // Track login activity
+      trackActivity(profile.id, 'login')
     }
 
     setCurrentStatus(att?.status ?? 'active')
-    // statusSince will be approximate — we'll use the DB updated_at or login_time
     setStatusSince(att?.updated_at ?? att?.login_time ?? new Date().toISOString())
     setReady(true)
   }, [profile?.id, isAgent])
@@ -61,6 +63,8 @@ export function useAttendance() {
     setSwitching(true)
     try {
       await switchStatus(profile.id, newStatus)
+      // Track status change activity
+      trackActivity(profile.id, 'status_change', { from: currentStatus, to: newStatus })
       setCurrentStatus(newStatus)
       setStatusSince(new Date().toISOString())
       setLiveSecs(0)
@@ -74,6 +78,8 @@ export function useAttendance() {
   // ── Clock out (called on logout) ───────────────────────────────
   async function handleClockOut() {
     if (!profile?.id) return
+    // Track logout activity before clocking out
+    trackActivity(profile.id, 'logout')
     await clockOut(profile.id)
     setCurrentStatus(null)
     setLiveSecs(0)

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getCallingQueue, assignLeadIfUnassigned } from '@/lib/assignment'
 import { isCallingModeActive, stopCallingMode } from '../config/utils'
-import { getTodayAttendance } from '@/lib/attendanceService'
+import { getTodayAttendance, trackActivity } from '@/lib/attendanceService'
 
 // Re-export karo taaki jo bhi file in helpers ko import kar rahi thi woh break na ho
 export { getCallingIndexFromSession, getCallingQueueFromSession, setCallingIndex, stopCallingMode } from '../config/utils'
@@ -39,6 +39,10 @@ export function useCallingMode(profileId) {
       return
     }
     await assignLeadIfUnassigned(queue[0].id, profileId)
+
+    // Track call start activity
+    trackActivity(profileId, 'call_start', { lead_id: queue[0].id })
+
     sessionStorage.setItem('callingMode', 'true')
     sessionStorage.setItem('callingQueue', JSON.stringify(queue))
     sessionStorage.setItem('callingIndex', '0')
@@ -48,6 +52,8 @@ export function useCallingMode(profileId) {
   }
 
   function handleStopCalling() {
+    // Track call end activity
+    if (profileId) trackActivity(profileId, 'call_end')
     stopCallingMode()
     setCallingMode(false)
   }

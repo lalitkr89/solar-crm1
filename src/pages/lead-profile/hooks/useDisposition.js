@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { updateLead, logActivity, logCall, moveStage } from '@/lib/leadService'
 import { assignToSales } from '@/lib/assignment'
 import { supabase } from '@/lib/supabase'
+import { trackActivity } from '@/lib/attendanceService'
 
 export function useDisposition(lead, setLead, id, profile, role) {
   const [saving, setSaving] = useState(false)
@@ -62,6 +63,9 @@ export function useDisposition(lead, setLead, id, profile, role) {
     if (updates.stage) {
       await logActivity({ leadId: id, action: 'Stage changed (auto)', field: 'stage', oldVal: lead.stage, newVal: updates.stage, userId: profile.id, userName: profile.name })
     }
+
+    // Track disposition activity
+    trackActivity(profile.id, 'disposition', { lead_id: id, disposition: disp })
 
     setLead(prev => ({ ...prev, ...updates }))
     setSaving(false)

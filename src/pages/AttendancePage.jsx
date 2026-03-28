@@ -2,28 +2,51 @@ import { useEffect, useState, useCallback } from 'react'
 import { useAuth } from '@/context/AuthContext'
 import Layout from '@/components/layout/Layout'
 import { PageHeader, Avatar, Spinner } from '@/components/ui'
-import { supabase } from '@/lib/supabase'
-import { format } from 'date-fns'
+import { format, formatDistanceToNowStrict } from 'date-fns'
 import {
   RefreshCw, Activity, PauseCircle, BookOpen,
-  UtensilsCrossed, Cookie, Clock, LogIn, LogOut, Users
+  UtensilsCrossed, Cookie, Clock, LogIn, LogOut, Users,
+  Zap,
 } from 'lucide-react'
 import {
   getAllPresalesToday,
   getAgentLeadStats,
   ATTENDANCE_STATUSES,
   STATUS_MAP,
+  ACTIVITY_LABELS,
   fmtSecs,
   fmtTime,
 } from '@/lib/attendanceService'
 
 // ─── Status icon map ──────────────────────────────────────────────────────────
 const STATUS_ICONS = {
-  active:   Activity,
-  hold:     PauseCircle,
+  active: Activity,
+  hold: PauseCircle,
   training: BookOpen,
-  lunch:    UtensilsCrossed,
-  snacks:   Cookie,
+  lunch: UtensilsCrossed,
+  snacks: Cookie,
+}
+
+// ─── Live "Xm ago" ticker for last activity ───────────────────────────────────
+function LiveSince({ ts }) {
+  const [label, setLabel] = useState('')
+
+  useEffect(() => {
+    if (!ts) return
+    function update() {
+      const secs = Math.round((Date.now() - new Date(ts)) / 1000)
+      if (secs < 5) setLabel('just now')
+      else if (secs < 60) setLabel(`${secs}s ago`)
+      else if (secs < 3600) setLabel(`${Math.floor(secs / 60)}m ago`)
+      else setLabel(`${Math.floor(secs / 3600)}h ago`)
+    }
+    update()
+    const t = setInterval(update, 10_000)
+    return () => clearInterval(t)
+  }, [ts])
+
+  if (!ts) return null
+  return <div className="text-xs text-slate-400 mt-0.5 font-mono">{label}</div>
 }
 
 // ─── Live clock for open sessions ────────────────────────────────────────────
@@ -45,17 +68,20 @@ function AgentRow({ agent, leadStats }) {
   const Icon = cfg ? STATUS_ICONS[agent.currentStatus] : null
 
   const totalActive = agent.breakdown?.active ?? 0
-  const totalBreak  = (agent.breakdown?.hold ?? 0) +
-                      (agent.breakdown?.lunch ?? 0) +
-                      (agent.breakdown?.snacks ?? 0)
-  const totalDay    = Object.values(agent.breakdown ?? {}).reduce((a, b) => a + b, 0)
+  const totalBreak = (agent.breakdown?.lunch ?? 0) +
+    (agent.breakdown?.snacks ?? 0)
+  const totalDay = Object.values(agent.breakdown ?? {}).reduce((a, b) => a + b, 0)
 
-  const uniqueLeads   = new Set(leadStats.map(l => l.lead_id)).size
+  const uniqueLeads = new Set(leadStats.map(l => l.lead_id)).size
   const totalLeadSecs = leadStats.reduce((a, l) => a + (l.duration_secs ?? 0), 0)
 
+  const lastAct = agent.lastActivity
+
   return (
-    <div className="grid gap-4 px-4 py-3 border-b border-slate-100 items-center hover:bg-slate-50/60 transition-colors"
-      style={{ gridTemplateColumns: '200px 140px 1fr 140px 140px' }}>
+    <div
+      className="grid gap-4 px-4 py-3 border-b border-slate-100 items-center hover:bg-slate-50/60 transition-colors"
+      style={{ gridTemplateColumns: '200px 140px 1fr 140px 130px 160px' }}
+    >
 
       {/* Agent name */}
       <div className="flex items-center gap-2.5">
@@ -75,8 +101,10 @@ function AgentRow({ agent, leadStats }) {
       {/* Current status */}
       <div>
         {cfg && Icon ? (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold"
-            style={{ background: cfg.bg, color: cfg.color }}>
+          <span
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold"
+            style={{ background: cfg.bg, color: cfg.color }}
+          >
             <Icon size={11} />
             {cfg.label}
           </span>
@@ -84,13 +112,6 @@ function AgentRow({ agent, leadStats }) {
           <span className="text-xs text-slate-300 italic">
             {agent.logoutTime ? 'Logged out' : 'Offline'}
           </span>
-        )}
-        {/* Live timer for current status */}
-        {agent.currentStatus && !agent.logoutTime && (
-          <div className="text-xs text-slate-400 mt-0.5 pl-0.5">
-            {/* Find current open session start — approximate from breakdown */}
-            <span className="font-mono">ongoing</span>
-          </div>
         )}
       </div>
 
@@ -100,15 +121,17 @@ function AgentRow({ agent, leadStats }) {
           const secs = agent.breakdown?.[s.key] ?? 0
           if (!secs && !agent.loginTime) return null
           const pct = totalDay > 0 ? Math.round((secs / totalDay) * 100) : 0
-          const Ic  = STATUS_ICONS[s.key]
+          const Ic = STATUS_ICONS[s.key]
           return (
             <div key={s.key} className="flex items-center gap-2">
               <span className="w-14 text-xs text-slate-500 flex items-center gap-1" style={{ color: s.color }}>
                 <Ic size={10} /> {s.label}
               </span>
               <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                <div className="h-full rounded-full transition-all"
-                  style={{ width: `${pct}%`, background: s.color }} />
+                <div
+                  className="h-full rounded-full transition-all"
+                  style={{ width: `${pct}%`, background: s.color }}
+                />
               </div>
               <span className="text-xs font-mono text-slate-500 w-16 text-right">
                 {fmtSecs(secs)}
@@ -138,6 +161,28 @@ function AgentRow({ agent, leadStats }) {
           <div className="text-xs text-amber-600 mt-0.5">{fmtSecs(totalBreak)} breaks</div>
         )}
       </div>
+
+      {/* Last Activity — NEW COLUMN */}
+      <div className="text-right">
+        {lastAct ? (
+          <>
+            <div className="text-xs font-medium text-slate-600 flex items-center justify-end gap-1">
+              <Zap size={10} className="text-amber-400" />
+              {ACTIVITY_LABELS[lastAct.action] ?? lastAct.action}
+            </div>
+            <LiveSince ts={lastAct.happened_at} />
+            {/* Show extra meta context if available */}
+            {lastAct.meta?.to && (
+              <div className="text-xs text-slate-400">
+                → {lastAct.meta.to}
+              </div>
+            )}
+          </>
+        ) : (
+          <span className="text-xs text-slate-300 italic">—</span>
+        )}
+      </div>
+
     </div>
   )
 }
@@ -156,9 +201,9 @@ function StatCard({ label, value, sub, color = '#378ADD' }) {
 // ─── Main page ────────────────────────────────────────────────────────────────
 export default function AttendancePage() {
   const { isSuperAdmin, isManager, profile } = useAuth()
-  const [agents,     setAgents]     = useState([])
-  const [leadStats,  setLeadStats]  = useState({}) // userId → []
-  const [loading,    setLoading]    = useState(true)
+  const [agents, setAgents] = useState([])
+  const [leadStats, setLeadStats] = useState({}) // userId → []
+  const [loading, setLoading] = useState(true)
   const [lastRefresh, setLastRefresh] = useState(null)
   const today = format(new Date(), 'EEEE, dd MMM yyyy')
 
@@ -168,7 +213,6 @@ export default function AttendancePage() {
       const rows = await getAllPresalesToday()
       setAgents(rows)
 
-      // Load lead stats per agent
       const stats = {}
       await Promise.all(rows.map(async a => {
         stats[a.id] = await getAgentLeadStats(a.id)
@@ -182,24 +226,21 @@ export default function AttendancePage() {
 
   useEffect(() => {
     load()
-    // Auto-refresh every 60s
-    const t = setInterval(load, 60_000)
+    // Auto-refresh every 30s
+    const t = setInterval(load, 30_000)
     return () => clearInterval(t)
   }, [load])
 
   // Summary counts
-  const online    = agents.filter(a => a.currentStatus).length
-  const active    = agents.filter(a => a.currentStatus === 'active').length
-  const onBreak   = agents.filter(a => ['hold','lunch','snacks'].includes(a.currentStatus)).length
-  const training  = agents.filter(a => a.currentStatus === 'training').length
-  const offline   = agents.filter(a => !a.currentStatus).length
+  const online = agents.filter(a => a.currentStatus).length
+  const active = agents.filter(a => a.currentStatus === 'active').length
+  const onBreak = agents.filter(a => ['lunch', 'snacks'].includes(a.currentStatus)).length
+  const training = agents.filter(a => a.currentStatus === 'training').length
+  const offline = agents.filter(a => !a.currentStatus).length
 
   return (
     <Layout>
-      <PageHeader
-        title="Presales Attendance"
-        subtitle={today}
-      >
+      <PageHeader title="Presales Attendance" subtitle={today}>
         <div className="flex items-center gap-2">
           {lastRefresh && (
             <span className="text-xs text-slate-400">
@@ -216,7 +257,7 @@ export default function AttendancePage() {
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-5">
         <StatCard label="Online" value={online} sub={`of ${agents.length} agents`} color="#7F77DD" />
         <StatCard label="Active" value={active} sub="On calls" color="#16a34a" />
-        <StatCard label="On Break" value={onBreak} sub="Hold/Lunch/Snacks" color="#d97706" />
+        <StatCard label="On Break" value={onBreak} sub="Lunch/Snacks" color="#d97706" />
         <StatCard label="Training" value={training} sub="In session" color="#7c3aed" />
         <StatCard label="Offline" value={offline} sub="Not logged in" color="#94a3b8" />
       </div>
@@ -224,13 +265,18 @@ export default function AttendancePage() {
       {/* Table */}
       <div className="card p-0 overflow-hidden">
         {/* Header */}
-        <div className="grid gap-4 px-4 py-2.5 bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wide"
-          style={{ gridTemplateColumns: '200px 140px 1fr 140px 140px' }}>
+        <div
+          className="grid gap-4 px-4 py-2.5 bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wide"
+          style={{ gridTemplateColumns: '200px 140px 1fr 140px 130px 160px' }}
+        >
           <span className="flex items-center gap-1"><Users size={11} /> Agent</span>
           <span>Current Status</span>
           <span>Today's Breakdown</span>
           <span className="text-center">Lead Activity</span>
           <span className="text-right">Time Summary</span>
+          <span className="text-right flex items-center justify-end gap-1">
+            <Zap size={10} /> Last Activity
+          </span>
         </div>
 
         {loading ? (
@@ -257,15 +303,14 @@ export default function AttendancePage() {
         {ATTENDANCE_STATUSES.map(s => {
           const Ic = STATUS_ICONS[s.key]
           return (
-            <span key={s.key} className="flex items-center gap-1.5 text-xs"
-              style={{ color: s.color }}>
+            <span key={s.key} className="flex items-center gap-1.5 text-xs" style={{ color: s.color }}>
               <Ic size={12} /> {s.label}
             </span>
           )
         })}
         <span className="text-xs text-slate-400 ml-auto">
           <Clock size={11} className="inline mr-1" />
-          Auto-refreshes every 60s
+          Auto-refreshes every 30s
         </span>
       </div>
     </Layout>

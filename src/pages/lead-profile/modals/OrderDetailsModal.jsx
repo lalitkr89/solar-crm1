@@ -64,6 +64,10 @@ export default function OrderDetailsModal({ lead, onClose, onSaved, userId, user
   })
   const [emiTotalAmount, setEmiTotalAmount] = useState('')
   const [emiTenureMonths, setEmiTenureMonths] = useState('')
+  // EMI — upfront / milestone payments (cash received outside EMI)
+  const [emiMilestones, setEmiMilestones] = useState({
+    advance: '', design: '', dispatch: '', installation: '', commissioning: '', remaining_note: '',
+  })
 
   // Corrections / change requests
   const [nameChangeRequired, setNameChangeRequired] = useState(false)
@@ -123,6 +127,12 @@ export default function OrderDetailsModal({ lead, onClose, onSaved, userId, user
         } : null,
         emi_total_amount: paymentMode === 'emi' ? (Number(emiTotalAmount) || null) : null,
         emi_tenure_months: paymentMode === 'emi' ? (Number(emiTenureMonths) || null) : null,
+        emi_advance: paymentMode === 'emi' ? (Number(emiMilestones.advance) || null) : null,
+        emi_design: paymentMode === 'emi' ? (Number(emiMilestones.design) || null) : null,
+        emi_dispatch: paymentMode === 'emi' ? (Number(emiMilestones.dispatch) || null) : null,
+        emi_installation: paymentMode === 'emi' ? (Number(emiMilestones.installation) || null) : null,
+        emi_commissioning: paymentMode === 'emi' ? (Number(emiMilestones.commissioning) || null) : null,
+        emi_remaining_note: paymentMode === 'emi' ? (emiMilestones.remaining_note || null) : null,
         below_min_advance_approval: isBelowMin ? belowMinApproval : null,
         design_included: designIncluded,
         structure_height_ft: Number(structureHeight) || null,
@@ -394,17 +404,82 @@ export default function OrderDetailsModal({ lead, onClose, onSaved, userId, user
 
           {/* EMI Payment */}
           {paymentMode === 'emi' && (
-            <div className="p-3 bg-pink-50 border border-pink-200 rounded-lg">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={labelCls}>Total Amount (₹) <span className="text-red-500">*</span></label>
-                  <input className={inputCls} type="number" placeholder="e.g. 150000"
-                    value={emiTotalAmount} onChange={e => setEmiTotalAmount(e.target.value)} />
+            <div className="space-y-3">
+              {/* Loan details */}
+              <div className="p-3 bg-pink-50 border border-pink-200 rounded-lg">
+                <div className="text-xs font-semibold text-pink-700 mb-2">📅 EMI / Loan Details</div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={labelCls}>Total Loan Amount (₹) <span className="text-red-500">*</span></label>
+                    <input className={inputCls} type="number" placeholder="e.g. 120000"
+                      value={emiTotalAmount} onChange={e => setEmiTotalAmount(e.target.value)} />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Tenure (months) <span className="text-red-500">*</span></label>
+                    <input className={inputCls} type="number" placeholder="e.g. 12"
+                      value={emiTenureMonths} onChange={e => setEmiTenureMonths(e.target.value)} />
+                  </div>
                 </div>
-                <div>
-                  <label className={labelCls}>Tenure (months) <span className="text-red-500">*</span></label>
-                  <input className={inputCls} type="number" placeholder="e.g. 12"
-                    value={emiTenureMonths} onChange={e => setEmiTenureMonths(e.target.value)} />
+              </div>
+
+              {/* Cash milestones collected outside EMI */}
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                <div className="text-xs font-semibold text-amber-700 mb-1">💵 Direct Payments (EMI ke Ilawa)</div>
+                <p className="text-xs text-amber-600 mb-3">Jo milestones applicable nahi hain unhe blank chhod do</p>
+                <div className="space-y-2">
+                  {[
+                    { key: 'advance', label: 'Advance', color: 'bg-green-50 border-green-200' },
+                    { key: 'design', label: 'Design Approval', color: 'bg-blue-50 border-blue-200' },
+                    { key: 'dispatch', label: 'At Dispatch / Delivery', color: 'bg-amber-50 border-amber-200' },
+                    { key: 'installation', label: 'Installation Complete', color: 'bg-orange-50 border-orange-200' },
+                    { key: 'commissioning', label: 'Commissioning', color: 'bg-purple-50 border-purple-200' },
+                  ].map(({ key, label, color }) => (
+                    <div key={key} className={`flex items-center gap-3 p-2.5 rounded-lg border ${color}`}>
+                      <span className="text-xs font-medium text-slate-700 w-44 flex-shrink-0">{label}</span>
+                      <div className="flex items-center gap-1.5 flex-1">
+                        <span className="text-slate-400 text-xs">₹</span>
+                        <input className="input flex-1 py-1.5 text-sm" type="number" placeholder="Amount"
+                          value={emiMilestones[key] ?? ''}
+                          onChange={e => setEmiMilestones(prev => ({ ...prev, [key]: e.target.value }))} />
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Live summary */}
+                  {(['advance', 'design', 'dispatch', 'installation', 'commissioning'].some(k => Number(emiMilestones[k]) > 0) || Number(emiTotalAmount) > 0) && (
+                    <div className="mt-2 p-2 bg-white border border-amber-200 rounded-lg text-xs text-slate-600 space-y-0.5">
+                      {[
+                        { key: 'advance', label: 'Advance', color: 'text-green-700' },
+                        { key: 'design', label: 'Design Approval', color: 'text-blue-700' },
+                        { key: 'dispatch', label: 'At Dispatch / Delivery', color: 'text-amber-700' },
+                        { key: 'installation', label: 'Installation Complete', color: 'text-orange-700' },
+                        { key: 'commissioning', label: 'Commissioning', color: 'text-purple-700' },
+                      ].filter(({ key }) => Number(emiMilestones[key]) > 0).map(({ key, label, color }) => (
+                        <div key={key} className="flex justify-between">
+                          <span>{label}</span>
+                          <span className={`font-medium ${color}`}>₹{Number(emiMilestones[key]).toLocaleString('en-IN')}</span>
+                        </div>
+                      ))}
+                      {Number(emiTotalAmount) > 0 && (
+                        <div className="flex justify-between">
+                          <span>Remaining via EMI</span>
+                          <span className="font-medium text-pink-700">₹{Number(emiTotalAmount).toLocaleString('en-IN')}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between font-semibold text-slate-800 border-t border-amber-100 pt-1 mt-1">
+                        <span>Total</span>
+                        <span>₹{(['advance', 'design', 'dispatch', 'installation', 'commissioning'].reduce((s, k) => s + (Number(emiMilestones[k]) || 0), 0) + (Number(emiTotalAmount) || 0)).toLocaleString('en-IN')}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Optional note */}
+                  <div className="mt-1">
+                    <label className={labelCls}>Remark (optional)</label>
+                    <input className={inputCls} type="text" placeholder="e.g. balance on EMI via HDFC bank"
+                      value={emiMilestones.remaining_note}
+                      onChange={e => setEmiMilestones(prev => ({ ...prev, remaining_note: e.target.value }))} />
+                  </div>
                 </div>
               </div>
             </div>
