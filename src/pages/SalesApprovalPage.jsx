@@ -374,6 +374,7 @@ function ApproveModal({ lead, approverId, approverName, onClose, onDone }) {
       order_approved_by: approverId,
       order_approved_at: now,
       order_rejected_reason: null,
+      state: lead.state ?? null,
     })
     await logActivity({
       leadId: lead.id,

@@ -16,6 +16,7 @@ import UsersPage from '@/pages/UsersPage'
 import NotFoundPage from '@/pages/NotFoundPage'
 import BulkImportPage from '@/pages/BulkImportPage'
 import SalesApprovalPage from '@/pages/SalesApprovalPage'
+import SalesAnalyticsPage from '@/pages/SalesAnalyticsPage'
 import PSDispositionApprovalsPage from '@/pages/PSDispositionApprovalsPage'
 import AttendancePage from '@/pages/AttendancePage'
 
@@ -135,6 +136,14 @@ function AppRoutes() {
         <RequireAuth>
           <RequireRole roles={['super_admin', 'sales_manager']}>
             <SalesApprovalPage />
+          </RequireRole>
+        </RequireAuth>
+      } />
+
+      <Route path="/sales-analytics" element={
+        <RequireAuth>
+          <RequireRole roles={['super_admin', 'sales_manager', 'sales_agent']}>
+            <SalesAnalyticsPage />
           </RequireRole>
         </RequireAuth>
       } />

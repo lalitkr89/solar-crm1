@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Kanban, Phone, Users, Wallet,
   HardHat, Shield, CalendarCheck, Zap, LogOut,
   UserCog, Upload, Menu, X, ClipboardCheck,
-  Activity, PauseCircle, BookOpen, UtensilsCrossed, Cookie, ClipboardList,
+  Activity, PauseCircle, BookOpen, UtensilsCrossed, Cookie, ClipboardList, TrendingUp,
 } from 'lucide-react'
 import { useAttendance } from '@/hooks/useAttendance'
 import { STATUS_MAP, fmtSecs } from '@/lib/attendanceService'
@@ -270,6 +270,10 @@ function NavContent({ onClose, profile, role, isSuperAdmin, isManager, onLogout,
             <NavLink to="/sales" onClick={onClose}
               className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
               <Users size={15} /> Meetings & leads
+            </NavLink>
+            <NavLink to="/sales-analytics" onClick={onClose}
+              className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+              <TrendingUp size={15} /> Analytics
             </NavLink>
             {(role === 'sales_manager' || isSuperAdmin) && (
               <NavLink to="/sales-approval" onClick={onClose}

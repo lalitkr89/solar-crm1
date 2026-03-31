@@ -129,6 +129,11 @@ export default function LeadProfilePage() {
             </div>
             <p className="text-sm text-slate-500 mt-0.5">
               {maskPhone(lead.phone)} · {lead.city ?? '—'} · Added {lead.created_at ? format(new Date(lead.created_at), 'd MMM yyyy') : '—'}
+              {lead.order_id && (
+                <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-green-50 border border-green-200 text-green-700 text-xs font-semibold tracking-wide">
+                  🔖 {lead.order_id}
+                </span>
+              )}
             </p>
           </div>
         </div>

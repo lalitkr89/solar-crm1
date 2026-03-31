@@ -212,13 +212,19 @@ export async function getAllPresalesToday() {
   const activityMap = {}
     ; (activityRows ?? []).forEach(r => { activityMap[r.user_id] = r })
 
-  // Purana unclosed log aaj ki midnight se clamp karne ke liye
+  // Aaj ki midnight — purane unclosed logs ko midnight se clamp karo
   const todayMidnight = new Date()
   todayMidnight.setHours(0, 0, 0, 0)
 
   return agents.map(agent => {
     const att = attRows?.find(a => a.user_id === agent.id)
     const myLogs = logs.filter(l => l.user_id === agent.id)
+
+    // Agar agent logout kar chuka hai to uski logout_time use karo cap ke liye
+    // Agar abhi bhi logged in hai to Date.now() use karo
+    const capTime = att?.logout_time
+      ? new Date(att.logout_time).getTime()
+      : Date.now()
 
     const breakdown = {}
     ATTENDANCE_STATUSES.forEach(s => {
@@ -227,9 +233,16 @@ export async function getAllPresalesToday() {
         .reduce((acc, l) => {
           let dur
           if (l.ended_at) {
+            // Properly closed log — use stored duration
             dur = l.duration_secs ?? 0
+          } else if (att?.logout_time) {
+            // Agent logged out but log wasn't closed properly (edge case)
+            // Cap at logout_time, not Date.now()
+            const from = Math.max(new Date(l.started_at).getTime(), todayMidnight.getTime())
+            const to = Math.min(capTime, Date.now())
+            dur = Math.max(0, Math.round((to - from) / 1000))
           } else {
-            // Clamp: purana unclosed log midnight se count hoga, pehle se nahi
+            // Agent still active — count live from started_at (clamped to midnight)
             const from = Math.max(new Date(l.started_at).getTime(), todayMidnight.getTime())
             dur = Math.round((Date.now() - from) / 1000)
           }

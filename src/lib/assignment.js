@@ -28,7 +28,48 @@ function isSlotReached(slot) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// CALLING QUEUE
+// CITY / STATE AWARE AGENT SELECTOR  (NEW)
+//
+// 3-tier matching strategy:
+//   Tier 1 — City match:  lead.city ∈ agent.assigned_cities  (case-insensitive)
+//   Tier 2 — State match: lead.state == agent.assigned_state  (case-insensitive)
+//   Tier 3 — Fallback:    any active agent, normal round-robin (least leads)
+//
+// Within each tier → sabse kam leads wala agent wins (fair distribution).
+//
+// @param agents  — array of agent rows (must include assigned_cities, assigned_state)
+// @param counts  — { [agentId]: number } lead count map
+// @param leadCity  — string | null
+// @param leadState — string | null
+// ─────────────────────────────────────────────────────────────
+function pickAgentByLocation(agents, counts, leadCity, leadState) {
+  const normalize = (s) => (s ?? '').trim().toLowerCase()
+  const city = normalize(leadCity)
+  const state = normalize(leadState)
+
+  const leastLoaded = (pool) =>
+    pool.reduce((min, a) => (counts[a.id] ?? 0) < (counts[min.id] ?? 0) ? a : min, pool[0])
+
+  // Tier 1: city match
+  if (city) {
+    const cityMatch = agents.filter(a =>
+      (a.assigned_cities ?? []).some(c => normalize(c) === city)
+    )
+    if (cityMatch.length > 0) return leastLoaded(cityMatch)
+  }
+
+  // Tier 2: state match
+  if (state) {
+    const stateMatch = agents.filter(a => normalize(a.assigned_state) === state)
+    if (stateMatch.length > 0) return leastLoaded(stateMatch)
+  }
+
+  // Tier 3: fallback — any active agent, least loaded
+  return leastLoaded(agents)
+}
+
+// ─────────────────────────────────────────────────────────────
+// CALLING QUEUE  ← UNCHANGED
 // Priority order:
 //   1. Callbacks due — callback_date <= today AND slot time reached
 //      (dispositions: any 'Call Later *' including Under Construction)
@@ -121,13 +162,12 @@ export async function getCallingQueue(agentId) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// ASSIGN LEAD ON CALLING START
+// ASSIGN LEAD ON CALLING START  ← UNCHANGED
 // Sirf tab call karo jab agent actually us lead pe jaaye
 // Race condition safe — agar kisi aur ne le liya to next lo
 // ─────────────────────────────────────────────────────────────
 export async function assignLeadIfUnassigned(leadId, agentId) {
   try {
-    // Check karo — kya ye lead abhi bhi unassigned hai?
     const { data: lead } = await supabase
       .from('leads')
       .select('id, assigned_to')
@@ -158,15 +198,18 @@ export async function assignLeadIfUnassigned(leadId, agentId) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// ROUND ROBIN — Bulk import ke liye
-// Last lead dekh ke nahi — actual COUNT dekh ke assign karta hai
-// Sabse kam leads wale agent ko milegi next lead (fair distribution)
+// ROUND ROBIN — Presales  (UPDATED: city/state aware)
+//
+// Pehle: sirf sabse-kam-leads wala agent
+// Ab:    city match → state match → least-loaded fallback
+//
+// Extra field fetch: assigned_cities, assigned_state
 // ─────────────────────────────────────────────────────────────
-export async function getNextCaller(team = 'presales') {
+export async function getNextCaller(team = 'presales', leadCity = null, leadState = null) {
   try {
     const { data: agents } = await supabase
       .from('users')
-      .select('id, name')
+      .select('id, name, assigned_cities, assigned_state')   // ← new fields
       .eq('team', team)
       .eq('role', `${team}_agent`)
       .eq('is_active', true)
@@ -174,7 +217,7 @@ export async function getNextCaller(team = 'presales') {
 
     if (!agents || agents.length === 0) return null
 
-    // Har agent ke leads count karo
+    // Lead count per agent
     const { data: counts } = await supabase
       .from('leads')
       .select('presales_agent_id')
@@ -188,10 +231,7 @@ export async function getNextCaller(team = 'presales') {
         }
       })
 
-    // Sabse kam leads wala agent return karo
-    return agents.reduce((min, agent) =>
-      countMap[agent.id] < countMap[min.id] ? agent : min
-      , agents[0])
+    return pickAgentByLocation(agents, countMap, leadCity, leadState)
 
   } catch {
     return null
@@ -199,10 +239,10 @@ export async function getNextCaller(team = 'presales') {
 }
 
 // ─────────────────────────────────────────────────────────────
-// BULK IMPORT ASSIGN
+// BULK IMPORT ASSIGN  (UPDATED: passes city/state from lead row)
 // ─────────────────────────────────────────────────────────────
-export async function autoAssignLead(leadId, team = 'presales') {
-  const caller = await getNextCaller(team)
+export async function autoAssignLead(leadId, team = 'presales', leadCity = null, leadState = null) {
+  const caller = await getNextCaller(team, leadCity, leadState)
   if (!caller) return null
 
   await supabase
@@ -217,7 +257,7 @@ export async function autoAssignLead(leadId, team = 'presales') {
 }
 
 // ─────────────────────────────────────────────────────────────
-// DIRECT ASSIGN — Add Lead modal se logged-in agent ko
+// DIRECT ASSIGN — Add Lead modal se logged-in agent ko  ← UNCHANGED
 // ─────────────────────────────────────────────────────────────
 export async function assignLeadToCurrentUser(leadId, agentId) {
   if (!agentId) return null
@@ -234,7 +274,7 @@ export async function assignLeadToCurrentUser(leadId, agentId) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// NEXT UNASSIGNED LEAD — Disposition save ke baad auto-assign
+// NEXT UNASSIGNED LEAD — Disposition ke baad auto-assign  (UPDATED: city/state aware)
 // Agent ne ek lead dispose ki → turant next unassigned lead milegi
 // Race condition safe: double assign nahi hoga
 // ─────────────────────────────────────────────────────────────
@@ -242,7 +282,7 @@ export async function assignNextUnassignedLead(agentId) {
   try {
     const { data: leads } = await supabase
       .from('leads')
-      .select('id, name, phone, city')
+      .select('id, name, phone, city, state')   // ← state bhi fetch karo
       .is('assigned_to', null)
       .is('presales_agent_id', null)
       .eq('stage', 'new')
@@ -253,12 +293,16 @@ export async function assignNextUnassignedLead(agentId) {
 
     const nextLead = leads[0]
 
+    // City/state-aware best agent dhundo
+    const bestAgent = await getNextCaller('presales', nextLead.city, nextLead.state)
+    if (!bestAgent) return null
+
     // Sirf tab update karo jab abhi bhi unassigned ho (race condition safe)
     const { data: updated, error } = await supabase
       .from('leads')
       .update({
-        assigned_to: agentId,
-        presales_agent_id: agentId,
+        assigned_to: bestAgent.id,
+        presales_agent_id: bestAgent.id,
       })
       .eq('id', nextLead.id)
       .is('assigned_to', null)  // guard: kisi aur ne pehle le liya to fail
@@ -274,13 +318,13 @@ export async function assignNextUnassignedLead(agentId) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// SALES ASSIGNMENT (presales se alag rakha, future use)
+// SALES: getNextSalesAgent  (UPDATED: city/state aware)
 // ─────────────────────────────────────────────────────────────
-export async function getNextSalesAgent() {
+export async function getNextSalesAgent(leadCity = null, leadState = null) {
   try {
     const { data: agents } = await supabase
       .from('users')
-      .select('id, name')
+      .select('id, name, assigned_cities, assigned_state')   // ← new fields
       .eq('team', 'sales')
       .eq('role', 'sales_agent')
       .eq('is_active', true)
@@ -301,17 +345,18 @@ export async function getNextSalesAgent() {
         }
       })
 
-    return agents.reduce((min, agent) =>
-      countMap[agent.id] < countMap[min.id] ? agent : min
-      , agents[0])
+    return pickAgentByLocation(agents, countMap, leadCity, leadState)
 
   } catch {
     return null
   }
 }
 
-export async function assignToSales(leadId) {
-  const agent = await getNextSalesAgent()
+// ─────────────────────────────────────────────────────────────
+// SALES: assignToSales  (UPDATED: city/state pass karo)
+// ─────────────────────────────────────────────────────────────
+export async function assignToSales(leadId, leadCity = null, leadState = null) {
+  const agent = await getNextSalesAgent(leadCity, leadState)
   if (!agent) return null
 
   await supabase
@@ -326,7 +371,7 @@ export async function assignToSales(leadId) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// SALES CALLING QUEUE
+// SALES CALLING QUEUE  ← UNCHANGED
 // Priority 1: Aaj + overdue meetings (meeting_date <= today, sales_outcome=null, slot check)
 // Priority 2: call_later_interested jinka sales_callback_date <= today + slot reached
 // Priority 3: call_not_connected_1/2/3 (oldest first)
@@ -414,7 +459,7 @@ export async function getSalesCallingQueue(agentId) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// SALES FOLLOW UP QUEUE
+// SALES FOLLOW UP QUEUE  ← UNCHANGED
 // Priority 1: HOT/MODERATE/COLD jinka sales_followup_date <= today + slot reached
 // Priority 2: call_later_underconstruction jinka sales_followup_date <= today + slot reached
 // ─────────────────────────────────────────────────────────────
@@ -481,7 +526,7 @@ export async function getSalesFollowUpQueue(agentId) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// ASSIGN SALES LEAD IF UNASSIGNED
+// ASSIGN SALES LEAD IF UNASSIGNED  ← UNCHANGED
 // Presales jaisa — race condition safe
 // ─────────────────────────────────────────────────────────────
 export async function assignSalesLeadIfUnassigned(leadId, agentId) {
