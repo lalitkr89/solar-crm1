@@ -326,6 +326,10 @@ function NavContent({ onClose, profile, role, isSuperAdmin, isManager, onLogout,
               className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
               <UserCog size={15} /> Manage users
             </NavLink>
+            <NavLink to="/roles" onClick={onClose}
+              className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+              <Shield size={15} /> Manage roles
+            </NavLink>
           </>
         )}
       </nav>

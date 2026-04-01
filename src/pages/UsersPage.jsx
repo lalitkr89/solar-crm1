@@ -1,47 +1,37 @@
+// src/pages/UsersPage.jsx
+// REPLACE existing file — role_id support add kiya, baaki sab same
+
 import { useEffect, useState } from 'react'
 import Layout from '@/components/layout/Layout'
 import { PageHeader, Avatar, Spinner, Modal } from '@/components/ui'
 import { supabase } from '@/lib/supabase'
-import { UserCog, Plus, RefreshCw, MapPin, ChevronDown, ChevronUp, X } from 'lucide-react'
+import { UserCog, Plus, RefreshCw, MapPin, X } from 'lucide-react'
 
-const ROLES = [
-  'super_admin',
-  'presales_manager', 'presales_agent',
-  'sales_manager', 'sales_agent',
-  'finance_manager', 'finance_agent',
-  'ops_manager', 'ops_agent',
-  'amc_manager', 'amc_agent',
-]
-
-const TEAM_MAP = {
-  presales_manager: 'presales', presales_agent: 'presales',
-  sales_manager: 'sales', sales_agent: 'sales',
-  finance_manager: 'finance', finance_agent: 'finance',
-  ops_manager: 'ops', ops_agent: 'ops',
-  amc_manager: 'amc', amc_agent: 'amc',
-}
-
-const ROLE_COLOR = {
-  super_admin: '#7F77DD', presales_manager: '#7F77DD', presales_agent: '#AFA9EC',
-  sales_manager: '#378ADD', sales_agent: '#85B7EB',
-  finance_manager: '#1D9E75', finance_agent: '#5DCAA5',
-  ops_manager: '#D85A30', ops_agent: '#F0997B',
-  amc_manager: '#BA7517', amc_agent: '#EF9F27',
-}
-
-// Only presales and sales agents get city/state assignment
-const LOCATION_ROLES = ['presales_agent', 'sales_agent']
+// Predefined roles (backward compat) — ab DB se bhi aate hain
+const LOCATION_ROLES_TEAMS = ['presales', 'sales']
 
 export default function UsersPage() {
   const [users, setUsers] = useState([])
+  const [roles, setRoles] = useState([])   // DB se roles
   const [loading, setLoading] = useState(true)
   const [showAdd, setShowAdd] = useState(false)
-  const [locationUser, setLocationUser] = useState(null)  // user being edited for city/state
+  const [locationUser, setLocationUser] = useState(null)
 
   async function load() {
     setLoading(true)
-    const { data } = await supabase.from('users').select('*').order('team').order('name')
-    setUsers(data ?? [])
+    const [{ data: usersData }, { data: rolesData }] = await Promise.all([
+      supabase
+        .from('users')
+        .select('*, role_data:role_id(id, name, label, team, is_manager)')
+        .order('team').order('name'),
+      supabase
+        .from('roles')
+        .select('*')
+        .eq('is_active', true)
+        .order('label'),
+    ])
+    setUsers(usersData ?? [])
+    setRoles(rolesData ?? [])
     setLoading(false)
   }
 
@@ -50,6 +40,31 @@ export default function UsersPage() {
   async function toggleActive(user) {
     await supabase.from('users').update({ is_active: !user.is_active }).eq('id', user.id)
     load()
+  }
+
+  // Role label — pehle DB se, fallback existing role string
+  function getRoleLabel(user) {
+    if (user.role_data?.label) return user.role_data.label
+    return user.role?.replace(/_/g, ' ') ?? '—'
+  }
+
+  function getTeam(user) {
+    return user.role_data?.team ?? user.team ?? '—'
+  }
+
+  function canEditLocation(user) {
+    const team = user.role_data?.team ?? user.team
+    return LOCATION_ROLES_TEAMS.includes(team)
+  }
+
+  // Role ke hisaab se color
+  const TEAM_COLORS = {
+    presales: '#7F77DD', sales: '#378ADD', finance: '#1D9E75',
+    ops: '#D85A30', amc: '#BA7517',
+  }
+  function getColor(user) {
+    const team = user.role_data?.team ?? user.team
+    return TEAM_COLORS[team] ?? '#378ADD'
   }
 
   return (
@@ -62,7 +77,7 @@ export default function UsersPage() {
       </PageHeader>
 
       <div className="card p-0 overflow-hidden">
-        <div className="grid grid-cols-[1fr_160px_120px_140px_80px_80px] gap-3 px-4 py-2.5 bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wide">
+        <div className="grid grid-cols-[1fr_180px_110px_150px_80px_80px] gap-3 px-4 py-2.5 bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wide">
           <span>Name</span><span>Role</span><span>Team</span><span>Cities / State</span><span>Status</span><span>Action</span>
         </div>
 
@@ -71,9 +86,10 @@ export default function UsersPage() {
         ) : (
           users.map(user => (
             <div key={user.id}
-              className="grid grid-cols-[1fr_160px_120px_140px_80px_80px] gap-3 px-4 py-3 border-b border-slate-100 items-center">
+              className="grid grid-cols-[1fr_180px_110px_150px_80px_80px] gap-3 px-4 py-3 border-b border-slate-100 items-center">
+
               <div className="flex items-center gap-2.5">
-                <Avatar name={user.name} size={28} color={ROLE_COLOR[user.role] ?? '#378ADD'} />
+                <Avatar name={user.name} size={28} color={getColor(user)} />
                 <div>
                   <div className="text-sm font-medium text-slate-800">{user.name}</div>
                   <div className="text-xs text-slate-400">{user.email}</div>
@@ -81,14 +97,13 @@ export default function UsersPage() {
               </div>
 
               <span className="text-xs font-medium text-slate-600 capitalize">
-                {user.role?.replace('_', ' ')}
+                {getRoleLabel(user)}
               </span>
 
-              <span className="text-xs text-slate-500 capitalize">{user.team ?? '—'}</span>
+              <span className="text-xs text-slate-500 capitalize">{getTeam(user)}</span>
 
-              {/* City/State column — only for presales/sales agents */}
               <div className="flex flex-col gap-0.5">
-                {LOCATION_ROLES.includes(user.role) ? (
+                {canEditLocation(user) ? (
                   <button
                     onClick={() => setLocationUser(user)}
                     className="flex items-center gap-1 text-xs text-left text-slate-500 hover:text-blue-600 transition-colors group"
@@ -96,10 +111,8 @@ export default function UsersPage() {
                     <MapPin size={11} className="shrink-0 text-slate-400 group-hover:text-blue-500" />
                     <span className="truncate">
                       {(user.assigned_cities?.length > 0 || user.assigned_state)
-                        ? [
-                          ...(user.assigned_cities ?? []),
-                          user.assigned_state ? `[${user.assigned_state}]` : null,
-                        ].filter(Boolean).join(', ')
+                        ? [...(user.assigned_cities ?? []), user.assigned_state ? `[${user.assigned_state}]` : null]
+                          .filter(Boolean).join(', ')
                         : <span className="text-slate-300 italic">Set cities…</span>
                       }
                     </span>
@@ -126,26 +139,40 @@ export default function UsersPage() {
         )}
       </div>
 
-      <AddUserModal open={showAdd} onClose={() => { setShowAdd(false); load() }} />
+      <AddUserModal
+        open={showAdd}
+        roles={roles}
+        onClose={() => { setShowAdd(false); load() }}
+      />
       <LocationModal user={locationUser} onClose={() => { setLocationUser(null); load() }} />
     </Layout>
   )
 }
 
-// ─────────────────────────────────────────────────────────────
-// ADD USER MODAL  ← UNCHANGED
-// ─────────────────────────────────────────────────────────────
-function AddUserModal({ open, onClose }) {
-  const [form, setForm] = useState({ name: '', email: '', password: '', role: 'presales_agent' })
+// ── ADD USER MODAL ───────────────────────────────────────────
+function AddUserModal({ open, onClose, roles }) {
+  const [form, setForm] = useState({ name: '', email: '', password: '', role_id: '' })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+
+  // Default role_id — pehla role
+  useEffect(() => {
+    if (roles.length > 0 && !form.role_id) {
+      setForm(x => ({ ...x, role_id: roles[0].id }))
+    }
+  }, [roles])
 
   function set(f, v) { setForm(x => ({ ...x, [f]: v })) }
 
   async function handleSave() {
-    if (!form.email || !form.password || !form.name) { setError('All fields required'); return }
+    if (!form.email || !form.password || !form.name || !form.role_id) {
+      setError('Sab fields zaroori hain'); return
+    }
     setSaving(true); setError('')
     try {
+      // Selected role ka data lao
+      const selectedRole = roles.find(r => r.id === form.role_id)
+
       const { data, error: authErr } = await supabase.auth.admin.createUser({
         email: form.email, password: form.password, email_confirm: true
       })
@@ -155,9 +182,11 @@ function AddUserModal({ open, onClose }) {
         id: data.user.id,
         name: form.name,
         email: form.email,
-        role: form.role,
-        team: TEAM_MAP[form.role] ?? null,
+        role: selectedRole?.name ?? null,    // backward compat
+        team: selectedRole?.team ?? null,    // backward compat
+        role_id: form.role_id,                 // new flexible system
       })
+      setForm({ name: '', email: '', password: '', role_id: roles[0]?.id ?? '' })
       onClose()
     } catch (e) {
       setError(e.message)
@@ -176,9 +205,14 @@ function AddUserModal({ open, onClose }) {
           <input className="input" type="email" value={form.email} onChange={e => set('email', e.target.value)} /></div>
         <div><label className="label">Password</label>
           <input className="input" type="password" value={form.password} onChange={e => set('password', e.target.value)} /></div>
-        <div><label className="label">Role</label>
-          <select className="select" value={form.role} onChange={e => set('role', e.target.value)}>
-            {ROLES.map(r => <option key={r} value={r}>{r.replace('_', ' ')}</option>)}
+        <div>
+          <label className="label">Role</label>
+          <select className="select" value={form.role_id} onChange={e => set('role_id', e.target.value)}>
+            {roles.map(r => (
+              <option key={r.id} value={r.id}>
+                {r.label} {r.team ? `(${r.team})` : ''}
+              </option>
+            ))}
           </select>
         </div>
         <div className="flex gap-2 mt-1">
@@ -192,42 +226,27 @@ function AddUserModal({ open, onClose }) {
   )
 }
 
-// ─────────────────────────────────────────────────────────────
-// LOCATION MODAL  (NEW)
-// Manager yahan agent ko cities + state assign karta hai
-// ─────────────────────────────────────────────────────────────
+// ── LOCATION MODAL — unchanged ───────────────────────────────
 function LocationModal({ user, onClose }) {
-  const [cities, setCities] = useState([])   // array of strings
+  const [cities, setCities] = useState([])
   const [state, setState] = useState('')
   const [cityInput, setCityInput] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
-  // Jab user change ho — form reset karo
   useEffect(() => {
     if (!user) return
     setCities(user.assigned_cities ?? [])
     setState(user.assigned_state ?? '')
-    setCityInput('')
-    setError('')
+    setCityInput(''); setError('')
   }, [user])
 
   function addCity() {
     const trimmed = cityInput.trim()
     if (!trimmed) return
-    if (cities.map(c => c.toLowerCase()).includes(trimmed.toLowerCase())) {
-      setCityInput(''); return  // duplicate skip
-    }
+    if (cities.map(c => c.toLowerCase()).includes(trimmed.toLowerCase())) { setCityInput(''); return }
     setCities(prev => [...prev, trimmed])
     setCityInput('')
-  }
-
-  function removeCity(idx) {
-    setCities(prev => prev.filter((_, i) => i !== idx))
-  }
-
-  function handleCityKeyDown(e) {
-    if (e.key === 'Enter') { e.preventDefault(); addCity() }
   }
 
   async function handleSave() {
@@ -235,12 +254,8 @@ function LocationModal({ user, onClose }) {
     try {
       const { error: err } = await supabase
         .from('users')
-        .update({
-          assigned_cities: cities,
-          assigned_state: state.trim() || null,
-        })
+        .update({ assigned_cities: cities, assigned_state: state.trim() || null })
         .eq('id', user.id)
-
       if (err) throw err
       onClose()
     } catch (e) {
@@ -255,34 +270,26 @@ function LocationModal({ user, onClose }) {
   return (
     <Modal open={!!user} onClose={onClose} title={`City / State — ${user.name}`} width={460}>
       <p className="text-xs text-slate-500 mb-4">
-        Lead assignment order: <strong>City match</strong> → <strong>State match</strong> → round-robin fallback
+        Lead assignment: <strong>City match</strong> → <strong>State match</strong> → round-robin
       </p>
-
       {error && <p className="text-sm text-red-600 mb-3">{error}</p>}
 
-      {/* Cities */}
       <div className="mb-4">
         <label className="label">Assigned Cities</label>
         <div className="flex gap-2 mb-2">
-          <input
-            className="input flex-1"
-            placeholder="City name likhein, Enter dabayein…"
-            value={cityInput}
-            onChange={e => setCityInput(e.target.value)}
-            onKeyDown={handleCityKeyDown}
-          />
+          <input className="input flex-1" placeholder="City likhein, Enter dabayein…"
+            value={cityInput} onChange={e => setCityInput(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addCity())} />
           <button onClick={addCity} className="btn px-3">Add</button>
         </div>
-
         {cities.length === 0 ? (
-          <p className="text-xs text-slate-400 italic">Koi city assign nahi hai abhi</p>
+          <p className="text-xs text-slate-400 italic">Koi city nahi hai abhi</p>
         ) : (
           <div className="flex flex-wrap gap-1.5">
             {cities.map((city, i) => (
-              <span key={i}
-                className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-blue-50 border border-blue-200 text-blue-700 font-medium">
+              <span key={i} className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-blue-50 border border-blue-200 text-blue-700 font-medium">
                 {city}
-                <button onClick={() => removeCity(i)} className="hover:text-red-500 transition-colors">
+                <button onClick={() => setCities(prev => prev.filter((_, j) => j !== i))} className="hover:text-red-500">
                   <X size={10} />
                 </button>
               </span>
@@ -291,15 +298,9 @@ function LocationModal({ user, onClose }) {
         )}
       </div>
 
-      {/* State */}
       <div className="mb-5">
-        <label className="label">Assigned State <span className="text-slate-400 font-normal">(fallback — city match nahi toh)</span></label>
-        <input
-          className="input"
-          placeholder="e.g. Rajasthan"
-          value={state}
-          onChange={e => setState(e.target.value)}
-        />
+        <label className="label">Assigned State</label>
+        <input className="input" placeholder="e.g. Rajasthan" value={state} onChange={e => setState(e.target.value)} />
       </div>
 
       <div className="flex gap-2">

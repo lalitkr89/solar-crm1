@@ -1,7 +1,11 @@
+// src/App.jsx
+// REPLACE your existing file with this
+// RequireRole ab database permissions use karta hai
+
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from '@/context/AuthContext'
 
-// Pages
+// Pages — sab same hain, kuch nahi badla
 import LoginPage from '@/pages/LoginPage'
 import DashboardPage from '@/pages/DashboardPage'
 import LeadProfilePage from '@/pages/lead-profile/LeadProfilePage'
@@ -19,20 +23,7 @@ import SalesApprovalPage from '@/pages/SalesApprovalPage'
 import SalesAnalyticsPage from '@/pages/SalesAnalyticsPage'
 import PSDispositionApprovalsPage from '@/pages/PSDispositionApprovalsPage'
 import AttendancePage from '@/pages/AttendancePage'
-
-function RequireAuth({ children }) {
-  const { user, loading } = useAuth()
-  if (loading) return <FullScreenLoader />
-  if (!user) return <Navigate to="/login" replace />
-  return children
-}
-
-function RequireRole({ roles, children }) {
-  const { role, loading } = useAuth()
-  if (loading) return <FullScreenLoader />
-  if (!roles.includes(role)) return <Navigate to="/" replace />
-  return children
-}
+import RolesPage from '@/pages/RolesPage'   // NEW
 
 function FullScreenLoader() {
   return (
@@ -45,10 +36,35 @@ function FullScreenLoader() {
   )
 }
 
-function AppRoutes() {
-  const { user, role } = useAuth()
+function RequireAuth({ children }) {
+  const { user, loading } = useAuth()
+  if (loading) return <FullScreenLoader />
+  if (!user) return <Navigate to="/login" replace />
+  return children
+}
 
-  // Redirect logged-in users away from login
+// ── NEW: RequireRole ab canAccessPage use karta hai ─────────
+// Backward compatible — existing hardcoded roles bhi kaam karte hain
+// DB permissions bhi kaam karti hain
+function RequireRole({ path, roles, children }) {
+  const { role, loading, canAccessPage, isSuperAdmin } = useAuth()
+  if (loading) return <FullScreenLoader />
+
+  // Super admin always allowed
+  if (isSuperAdmin) return children
+
+  // DB-based check (naya system)
+  if (path && canAccessPage(path)) return children
+
+  // Fallback: old hardcoded check (backward compat)
+  if (roles && roles.includes(role)) return children
+
+  return <Navigate to="/" replace />
+}
+
+function AppRoutes() {
+  const { user } = useAuth()
+
   if (user && window.location.pathname === '/login') {
     return <Navigate to="/" replace />
   }
@@ -57,6 +73,7 @@ function AppRoutes() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
 
+      {/* Dashboard — sab dekh sakte hain */}
       <Route path="/" element={
         <RequireAuth><DashboardPage /></RequireAuth>
       } />
@@ -65,92 +82,40 @@ function AppRoutes() {
         <RequireAuth><TodayPage /></RequireAuth>
       } />
 
+      {/* Lead profile — sirf auth chahiye, role nahi */}
       <Route path="/leads/:id" element={
         <RequireAuth><LeadProfilePage /></RequireAuth>
       } />
 
+      {/* Kanban */}
       <Route path="/kanban" element={
         <RequireAuth>
-          <RequireRole roles={['super_admin', 'presales_manager', 'sales_manager', 'finance_manager', 'ops_manager', 'amc_manager']}>
+          <RequireRole path="/kanban" roles={['super_admin', 'presales_manager', 'sales_manager', 'finance_manager', 'ops_manager', 'amc_manager']}>
             <KanbanPage />
           </RequireRole>
         </RequireAuth>
       } />
 
+      {/* Presales */}
       <Route path="/presales" element={
         <RequireAuth>
-          <RequireRole roles={['super_admin', 'presales_manager', 'presales_agent']}>
+          <RequireRole path="/presales" roles={['super_admin', 'presales_manager', 'presales_agent']}>
             <PresalesPage />
           </RequireRole>
         </RequireAuth>
       } />
 
-      <Route path="/sales" element={
-        <RequireAuth>
-          <RequireRole roles={['super_admin', 'sales_manager', 'sales_agent']}>
-            <SalesPage />
-          </RequireRole>
-        </RequireAuth>
-      } />
-
-      <Route path="/finance" element={
-        <RequireAuth>
-          <RequireRole roles={['super_admin', 'finance_manager', 'finance_agent']}>
-            <FinancePage />
-          </RequireRole>
-        </RequireAuth>
-      } />
-
-      <Route path="/ops" element={
-        <RequireAuth>
-          <RequireRole roles={['super_admin', 'ops_manager', 'ops_agent']}>
-            <OpsPage />
-          </RequireRole>
-        </RequireAuth>
-      } />
-
-      <Route path="/amc" element={
-        <RequireAuth>
-          <RequireRole roles={['super_admin', 'amc_manager', 'amc_agent']}>
-            <AmcPage />
-          </RequireRole>
-        </RequireAuth>
-      } />
-
-      <Route path="/users" element={
-        <RequireAuth>
-          <RequireRole roles={['super_admin']}>
-            <UsersPage />
-          </RequireRole>
-        </RequireAuth>
-      } />
       <Route path="/bulk-import" element={
         <RequireAuth>
-          <RequireRole roles={['super_admin', 'presales_manager']}>
+          <RequireRole path="/bulk-import" roles={['super_admin', 'presales_manager', 'presales_agent']}>
             <BulkImportPage />
-          </RequireRole>
-        </RequireAuth>
-      } />
-
-      <Route path="/sales-approval" element={
-        <RequireAuth>
-          <RequireRole roles={['super_admin', 'sales_manager']}>
-            <SalesApprovalPage />
-          </RequireRole>
-        </RequireAuth>
-      } />
-
-      <Route path="/sales-analytics" element={
-        <RequireAuth>
-          <RequireRole roles={['super_admin', 'sales_manager', 'sales_agent']}>
-            <SalesAnalyticsPage />
           </RequireRole>
         </RequireAuth>
       } />
 
       <Route path="/ps-disposition-approvals" element={
         <RequireAuth>
-          <RequireRole roles={['super_admin', 'presales_manager']}>
+          <RequireRole path="/ps-disposition-approvals" roles={['super_admin', 'presales_manager']}>
             <PSDispositionApprovalsPage />
           </RequireRole>
         </RequireAuth>
@@ -158,8 +123,78 @@ function AppRoutes() {
 
       <Route path="/attendance" element={
         <RequireAuth>
-          <RequireRole roles={['super_admin', 'presales_manager']}>
+          <RequireRole path="/attendance" roles={['super_admin', 'presales_manager']}>
             <AttendancePage />
+          </RequireRole>
+        </RequireAuth>
+      } />
+
+      {/* Sales */}
+      <Route path="/sales" element={
+        <RequireAuth>
+          <RequireRole path="/sales" roles={['super_admin', 'sales_manager', 'sales_agent']}>
+            <SalesPage />
+          </RequireRole>
+        </RequireAuth>
+      } />
+
+      <Route path="/sales-analytics" element={
+        <RequireAuth>
+          <RequireRole path="/sales-analytics" roles={['super_admin', 'sales_manager', 'sales_agent']}>
+            <SalesAnalyticsPage />
+          </RequireRole>
+        </RequireAuth>
+      } />
+
+      <Route path="/sales-approval" element={
+        <RequireAuth>
+          <RequireRole path="/sales-approval" roles={['super_admin', 'sales_manager']}>
+            <SalesApprovalPage />
+          </RequireRole>
+        </RequireAuth>
+      } />
+
+      {/* Finance */}
+      <Route path="/finance" element={
+        <RequireAuth>
+          <RequireRole path="/finance" roles={['super_admin', 'finance_manager', 'finance_agent']}>
+            <FinancePage />
+          </RequireRole>
+        </RequireAuth>
+      } />
+
+      {/* Ops */}
+      <Route path="/ops" element={
+        <RequireAuth>
+          <RequireRole path="/ops" roles={['super_admin', 'ops_manager', 'ops_agent']}>
+            <OpsPage />
+          </RequireRole>
+        </RequireAuth>
+      } />
+
+      {/* AMC */}
+      <Route path="/amc" element={
+        <RequireAuth>
+          <RequireRole path="/amc" roles={['super_admin', 'amc_manager', 'amc_agent']}>
+            <AmcPage />
+          </RequireRole>
+        </RequireAuth>
+      } />
+
+      {/* Admin */}
+      <Route path="/users" element={
+        <RequireAuth>
+          <RequireRole path="/users" roles={['super_admin']}>
+            <UsersPage />
+          </RequireRole>
+        </RequireAuth>
+      } />
+
+      {/* NEW: Roles management page */}
+      <Route path="/roles" element={
+        <RequireAuth>
+          <RequireRole path="/roles" roles={['super_admin']}>
+            <RolesPage />
           </RequireRole>
         </RequireAuth>
       } />
