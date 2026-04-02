@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
 import Layout from '@/components/layout/Layout'
@@ -6,7 +6,7 @@ import { MetricCard, StageBadge, DispBadge, Spinner, PageHeader, EmptyState } fr
 import { supabase } from '@/lib/supabase'
 import { STAGES } from '@/config/stages'
 import { maskPhone } from '@/lib/phone'
-import { format, addDays, startOfDay } from 'date-fns'
+import { format, addDays, startOfDay, subMonths, startOfMonth, endOfMonth, parseISO } from 'date-fns'
 import { Phone, Calendar, RefreshCw, TrendingUp, Users, IndianRupee, ChevronRight } from 'lucide-react'
 
 export default function DashboardPage() {
@@ -25,6 +25,141 @@ export default function DashboardPage() {
   if (isSuperAdmin) return <Layout><SuperAdminDash profile={profile} /></Layout>
 
   return <Layout><p className="text-slate-400 p-4">Loading...</p></Layout>
+}
+
+
+// ── SHARED: Date Range Picker ─────────────────────────────────
+const fmtDate = d => format(d, 'yyyy-MM-dd')
+const fmtDisplay = d => format(d, 'd MMM yyyy')
+
+const PRESETS = [
+  { label: 'Last 7 days', days: 7 },
+  { label: 'This month', thisMonth: true },
+  { label: 'Last month', lastMonth: true },
+  { label: 'Last 3 months', months: 3 },
+  { label: 'Last 6 months', months: 6 },
+  { label: 'Last 1 year', months: 12 },
+  { label: 'All time', allTime: true },
+]
+
+function getPresetRange(preset) {
+  const today = new Date()
+  if (preset.days) {
+    const from = new Date(today); from.setDate(from.getDate() - preset.days + 1)
+    return { from: fmtDate(from), to: fmtDate(today) }
+  }
+  if (preset.thisMonth) return { from: fmtDate(startOfMonth(today)), to: fmtDate(today) }
+  if (preset.lastMonth) {
+    const prev = subMonths(today, 1)
+    return { from: fmtDate(startOfMonth(prev)), to: fmtDate(endOfMonth(prev)) }
+  }
+  if (preset.months) return { from: fmtDate(subMonths(startOfMonth(today), preset.months - 1)), to: fmtDate(today) }
+  if (preset.allTime) return { from: '2020-01-01', to: fmtDate(today) }
+  return null
+}
+
+function DateRangePicker({ value, onChange }) {
+  const [open, setOpen] = useState(false)
+  const [customFrom, setCustomFrom] = useState(value.from)
+  const [customTo, setCustomTo] = useState(value.to)
+  const ref = useRef(null)
+
+  useEffect(() => {
+    function handler(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  useEffect(() => { setCustomFrom(value.from); setCustomTo(value.to) }, [value.from, value.to])
+
+  function applyPreset(preset) {
+    const range = getPresetRange(preset)
+    if (range) { onChange(range); setOpen(false) }
+  }
+
+  function applyCustom() {
+    if (!customFrom || !customTo || customFrom > customTo) return
+    onChange({ from: customFrom, to: customTo })
+    setOpen(false)
+  }
+
+  const displayLabel = useMemo(() => {
+    const matched = PRESETS.find(p => {
+      const r = getPresetRange(p)
+      return r && r.from === value.from && r.to === value.to
+    })
+    if (matched) return matched.label
+    try { return `${fmtDisplay(parseISO(value.from))} – ${fmtDisplay(parseISO(value.to))}` }
+    catch { return 'Custom range' }
+  }, [value])
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="btn"
+        style={{ display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}
+      >
+        <Calendar size={12} />
+        <span className="text-xs">{displayLabel}</span>
+      </button>
+
+      {open && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 8px)', right: 0, zIndex: 999,
+          background: 'white', border: '1px solid #e2e8f0',
+          borderRadius: 12, padding: 16, width: 280,
+          boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
+        }}>
+          <p style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600, letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 8 }}>
+            Quick select
+          </p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
+            {PRESETS.map(preset => {
+              const r = getPresetRange(preset)
+              const active = r && r.from === value.from && r.to === value.to
+              return (
+                <button key={preset.label} onClick={() => applyPreset(preset)}
+                  style={{
+                    fontSize: 11, fontWeight: 500, padding: '4px 10px', borderRadius: 6,
+                    cursor: 'pointer', border: `1px solid ${active ? '#3b82f6' : '#e2e8f0'}`,
+                    background: active ? '#3b82f6' : '#f8fafc',
+                    color: active ? 'white' : '#475569', transition: 'all 0.12s',
+                  }}>
+                  {preset.label}
+                </button>
+              )
+            })}
+          </div>
+
+          <div style={{ height: 1, background: '#f1f5f9', marginBottom: 14 }} />
+
+          <p style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600, letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 10 }}>
+            Custom range
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+            <div>
+              <label style={{ fontSize: 10, color: '#64748b', display: 'block', marginBottom: 4 }}>From</label>
+              <input type="date" value={customFrom} max={customTo || fmtDate(new Date())}
+                onChange={e => setCustomFrom(e.target.value)}
+                className="input text-xs w-full" />
+            </div>
+            <div>
+              <label style={{ fontSize: 10, color: '#64748b', display: 'block', marginBottom: 4 }}>To</label>
+              <input type="date" value={customTo} min={customFrom} max={fmtDate(new Date())}
+                onChange={e => setCustomTo(e.target.value)}
+                className="input text-xs w-full" />
+            </div>
+          </div>
+          <button onClick={applyCustom}
+            disabled={!customFrom || !customTo || customFrom > customTo}
+            className="btn-primary w-full justify-center text-xs disabled:opacity-40">
+            Apply range
+          </button>
+        </div>
+      )}
+    </div>
+  )
 }
 
 // ── SHARED: Date filter bar ───────────────────────────────────
@@ -114,7 +249,8 @@ function PresalesAgentDash({ profile }) {
   const navigate = useNavigate()
   const [leads, setLeads] = useState([])
   const [loading, setLoading] = useState(true)
-  const [dateFilter, setDateFilter] = useState('')
+  const defaultRange = { from: '2020-01-01', to: fmtDate(new Date()) }
+  const [dateRange, setDateRange] = useState(defaultRange)
   const today = format(new Date(), 'yyyy-MM-dd')
 
   async function load() {
@@ -122,17 +258,21 @@ function PresalesAgentDash({ profile }) {
     let q = supabase
       .from('leads')
       .select('id, name, phone, city, stage, disposition, call_status, calling_date, callback_date, callback_slot, meeting_date, meeting_slot, updated_at')
-      .eq('assigned_to', profile.id)
-      .in('stage', ['new', 'meeting_scheduled', 'qc_followup'])
+      .or(`presales_agent_id.eq.${profile.id},and(assigned_to.eq.${profile.id},stage.in.(new,meeting_scheduled,qc_followup))`)
+      .in('stage', ['new', 'meeting_scheduled', 'qc_followup', 'sale_closed'])
       .order('updated_at', { ascending: false })
 
-    if (dateFilter) q = q.eq('calling_date', dateFilter)
+    const isAllTime = dateRange.from === '2020-01-01'
+    if (!isAllTime) {
+      if (dateRange.from) q = q.gte('created_at', dateRange.from)
+      if (dateRange.to) q = q.lte('created_at', dateRange.to + 'T23:59:59')
+    }
     const { data } = await q
     setLeads(data ?? [])
     setLoading(false)
   }
 
-  useEffect(() => { load() }, [dateFilter])
+  useEffect(() => { load() }, [dateRange.from, dateRange.to])
 
   const totalLeads = leads.length
   const callsToday = leads.filter(l => l.calling_date === today).length
@@ -148,7 +288,7 @@ function PresalesAgentDash({ profile }) {
           <p className="text-sm text-slate-500 mt-0.5">{format(new Date(), 'EEEE, d MMMM yyyy')}</p>
         </div>
         <div className="flex items-center gap-2">
-          <DateFilter value={dateFilter} onChange={setDateFilter} />
+          <DateRangePicker value={dateRange} onChange={setDateRange} />
           <button onClick={load} className="btn"><RefreshCw size={13} /></button>
         </div>
       </div>
@@ -204,7 +344,8 @@ function PresalesManagerDash({ profile }) {
   const [leads, setLeads] = useState([])
   const [agents, setAgents] = useState([])
   const [loading, setLoading] = useState(true)
-  const [dateFilter, setDateFilter] = useState('')
+  const defaultRange = { from: '2020-01-01', to: fmtDate(new Date()) }
+  const [dateRange, setDateRange] = useState(defaultRange)
   const today = format(new Date(), 'yyyy-MM-dd')
 
   async function load() {
@@ -212,10 +353,14 @@ function PresalesManagerDash({ profile }) {
     let q = supabase
       .from('leads')
       .select('id, name, phone, city, stage, disposition, call_status, calling_date, callback_date, meeting_date, assigned_to, assigned_user:assigned_to(id,name), updated_at')
-      .in('stage', ['new', 'meeting_scheduled', 'qc_followup'])
+      .in('stage', ['new', 'meeting_scheduled', 'qc_followup', 'sale_closed'])
       .order('updated_at', { ascending: false })
 
-    if (dateFilter) q = q.eq('calling_date', dateFilter)
+    const isAllTime = dateRange.from === '2020-01-01'
+    if (!isAllTime) {
+      if (dateRange.from) q = q.gte('created_at', dateRange.from)
+      if (dateRange.to) q = q.lte('created_at', dateRange.to + 'T23:59:59')
+    }
 
     const [{ data: leadsData }, { data: agentsData }] = await Promise.all([
       q,
@@ -227,7 +372,7 @@ function PresalesManagerDash({ profile }) {
     setLoading(false)
   }
 
-  useEffect(() => { load() }, [dateFilter])
+  useEffect(() => { load() }, [dateRange.from, dateRange.to])
 
   const totalLeads = leads.length
   const callsToday = leads.filter(l => l.calling_date === today).length
@@ -261,7 +406,7 @@ function PresalesManagerDash({ profile }) {
           <p className="text-sm text-slate-500 mt-0.5">{format(new Date(), 'EEEE, d MMMM yyyy')}</p>
         </div>
         <div className="flex items-center gap-2">
-          <DateFilter value={dateFilter} onChange={setDateFilter} />
+          <DateRangePicker value={dateRange} onChange={setDateRange} />
           <button onClick={load} className="btn"><RefreshCw size={13} /></button>
         </div>
       </div>

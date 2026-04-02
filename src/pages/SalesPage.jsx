@@ -4,7 +4,7 @@ import { useAuth } from '@/context/AuthContext'
 import Layout from '@/components/layout/Layout'
 import { PageHeader, Spinner, Modal } from '@/components/ui'
 import { supabase } from '@/lib/supabase'
-import { formatPhone, cleanPhone } from '@/lib/phone'
+import { formatPhone, cleanPhone, maskPhone } from '@/lib/phone'
 import { getSalesCallingQueue, getSalesFollowUpQueue, assignSalesLeadIfUnassigned } from '@/lib/assignment'
 import { format } from 'date-fns'
 import { RefreshCw, Search, X, Filter, Phone, PhoneOff, TrendingUp } from 'lucide-react'
@@ -509,7 +509,7 @@ export default function SalesPage() {
                     </div>
                     <div className="min-w-0">
                       <div className="text-sm font-medium text-slate-800 truncate">{lead.name ?? '—'}</div>
-                      <div className="text-xs text-slate-400 mt-0.5">{formatPhone(lead.phone)} · {lead.city ?? '—'}</div>
+                      <div className="text-xs text-slate-400 mt-0.5">{maskPhone(lead.phone)} · {lead.city ?? '—'}</div>
                     </div>
                   </div>
                   {lead.sales_outcome ? (
@@ -643,7 +643,7 @@ export default function SalesPage() {
                       {/* g:0 Lead Info */}
                       <td className="px-3 py-2.5" style={{ width: 180, minWidth: 180 }}>
                         <div className="font-medium text-slate-800 text-sm truncate">{lead.name ?? '—'}</div>
-                        <div className="text-xs text-slate-400">{formatPhone(lead.phone)}</div>
+                        <div className="text-xs text-slate-400">{maskPhone(lead.phone)}</div>
                       </td>
                       <td className="px-3 py-2.5" style={{ width: 90, minWidth: 90 }}>
                         <span className="text-xs text-slate-600">{lead.city ?? '—'}</span>

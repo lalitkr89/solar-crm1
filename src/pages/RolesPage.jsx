@@ -1,6 +1,4 @@
-// src/pages/RolesPage.jsx  ← NEW FILE
-// Super admin yahan se roles aur unki permissions manage kar sakta hai
-
+// src/pages/RolesPage.jsx
 import { useEffect, useState } from 'react'
 import Layout from '@/components/layout/Layout'
 import { PageHeader, Modal, Spinner } from '@/components/ui'
@@ -50,7 +48,7 @@ const TEAMS = ['presales', 'sales', 'finance', 'ops', 'amc']
 export default function RolesPage() {
   const [roles, setRoles] = useState([])
   const [loading, setLoading] = useState(true)
-  const [expanded, setExpanded] = useState(null)  // expanded role id
+  const [expanded, setExpanded] = useState(null)
   const [showAdd, setShowAdd] = useState(false)
 
   async function load() {
@@ -64,6 +62,10 @@ export default function RolesPage() {
   }
 
   useEffect(() => { load() }, [])
+
+  function handleToggle(id) {
+    setExpanded(prev => prev === id ? null : id)
+  }
 
   return (
     <Layout>
@@ -83,8 +85,8 @@ export default function RolesPage() {
               key={role.id}
               role={role}
               isExpanded={expanded === role.id}
-              onToggle={() => setExpanded(expanded === role.id ? null : role.id)}
-              onUpdated={load}
+              onToggle={() => handleToggle(role.id)}
+              onDeleted={load}
             />
           ))}
         </div>
@@ -99,27 +101,30 @@ export default function RolesPage() {
 }
 
 // ── Role Card ───────────────────────────────────────────────
-function RoleCard({ role, isExpanded, onToggle, onUpdated }) {
+function RoleCard({ role, isExpanded, onToggle, onDeleted }) {
   const [pagePerms, setPagePerms] = useState([])
   const [stagePerms, setStagePerms] = useState([])
+  const [fetching, setFetching] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [loaded, setLoaded] = useState(false)
+  const [savedMsg, setSavedMsg] = useState(false)
 
-  // Expand hone pe permissions fetch karo
+  // Fetch fresh data every time card is expanded
   useEffect(() => {
-    if (!isExpanded || loaded) return
+    if (!isExpanded) return
 
     async function fetchPerms() {
+      setFetching(true)
       const [{ data: pp }, { data: sp }] = await Promise.all([
         supabase.from('page_access').select('page, can_access').eq('role_id', role.id),
         supabase.from('stage_access').select('stage_name, can_view, can_move_lead').eq('role_id', role.id),
       ])
       setPagePerms(pp ?? [])
       setStagePerms(sp ?? [])
-      setLoaded(true)
+      setFetching(false)
     }
+
     fetchPerms()
-  }, [isExpanded, role.id, loaded])
+  }, [isExpanded, role.id])
 
   function isPageAllowed(path) {
     return pagePerms.some(p => p.page === path && p.can_access)
@@ -128,9 +133,7 @@ function RoleCard({ role, isExpanded, onToggle, onUpdated }) {
   function togglePage(path) {
     setPagePerms(prev => {
       const existing = prev.find(p => p.page === path)
-      if (existing) {
-        return prev.map(p => p.page === path ? { ...p, can_access: !p.can_access } : p)
-      }
+      if (existing) return prev.map(p => p.page === path ? { ...p, can_access: !p.can_access } : p)
       return [...prev, { page: path, can_access: true }]
     })
   }
@@ -154,7 +157,6 @@ function RoleCard({ role, isExpanded, onToggle, onUpdated }) {
   async function handleSave() {
     setSaving(true)
     try {
-      // Pages — upsert
       const pageUpserts = ALL_PAGES.map(p => ({
         role_id: role.id,
         page: p.path,
@@ -164,7 +166,6 @@ function RoleCard({ role, isExpanded, onToggle, onUpdated }) {
         .from('page_access')
         .upsert(pageUpserts, { onConflict: 'role_id,page' })
 
-      // Stages — upsert
       const stageUpserts = ALL_STAGES.map(s => ({
         role_id: role.id,
         stage_name: s.key,
@@ -175,7 +176,10 @@ function RoleCard({ role, isExpanded, onToggle, onUpdated }) {
         .from('stage_access')
         .upsert(stageUpserts, { onConflict: 'role_id,stage_name' })
 
-      onUpdated()
+      // ✅ FIX: onUpdated() hata diya — wo re-render + useEffect trigger karta tha
+      // jisse DB se purana data wapas fetch hokar local checkbox state override ho jaati thi
+      setSavedMsg(true)
+      setTimeout(() => setSavedMsg(false), 2500)
     } finally {
       setSaving(false)
     }
@@ -184,7 +188,7 @@ function RoleCard({ role, isExpanded, onToggle, onUpdated }) {
   async function handleDelete() {
     if (!confirm(`"${role.label}" role delete karna chahte ho? Isse assigned users affect honge.`)) return
     await supabase.from('roles').delete().eq('id', role.id)
-    onUpdated()
+    onDeleted() // ✅ Sirf delete ke baad parent reload — ye sahi hai
   }
 
   const TEAM_COLORS = {
@@ -193,12 +197,16 @@ function RoleCard({ role, isExpanded, onToggle, onUpdated }) {
     finance: 'bg-green-100 text-green-700',
     ops: 'bg-orange-100 text-orange-700',
     amc: 'bg-amber-100 text-amber-700',
-    null: 'bg-slate-100 text-slate-600',
   }
+
+  const PROTECTED_ROLES = [
+    'super_admin', 'presales_manager', 'presales_agent',
+    'sales_manager', 'sales_agent', 'finance_manager', 'finance_agent',
+    'ops_manager', 'ops_agent', 'amc_manager', 'amc_agent',
+  ]
 
   return (
     <div className="card p-0 overflow-hidden">
-      {/* Header row */}
       <button
         onClick={onToggle}
         className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-slate-50 transition-colors text-left"
@@ -208,9 +216,8 @@ function RoleCard({ role, isExpanded, onToggle, onUpdated }) {
           <div className="text-sm font-semibold text-slate-800">{role.label}</div>
           <div className="text-xs text-slate-400">{role.name}</div>
         </div>
-
         {role.team && (
-          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${TEAM_COLORS[role.team] ?? TEAM_COLORS.null}`}>
+          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${TEAM_COLORS[role.team] ?? 'bg-slate-100 text-slate-600'}`}>
             {role.team}
           </span>
         )}
@@ -219,22 +226,18 @@ function RoleCard({ role, isExpanded, onToggle, onUpdated }) {
             manager
           </span>
         )}
-
         {isExpanded ? <ChevronUp size={15} className="text-slate-400" /> : <ChevronDown size={15} className="text-slate-400" />}
       </button>
 
-      {/* Expanded permissions editor */}
       {isExpanded && (
         <div className="border-t border-slate-100 px-4 pt-4 pb-5">
-          {!loaded ? (
+          {fetching ? (
             <div className="flex justify-center py-6"><Spinner size={18} /></div>
           ) : (
             <>
               {/* Pages */}
               <div className="mb-5">
-                <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
-                  Page Access
-                </div>
+                <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Page Access</div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
                   {ALL_PAGES.map(p => (
                     <label key={p.path} className="flex items-center gap-2 cursor-pointer group">
@@ -244,9 +247,7 @@ function RoleCard({ role, isExpanded, onToggle, onUpdated }) {
                         onChange={() => togglePage(p.path)}
                         className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                       />
-                      <span className="text-xs text-slate-600 group-hover:text-slate-800">
-                        {p.label}
-                      </span>
+                      <span className="text-xs text-slate-600 group-hover:text-slate-800">{p.label}</span>
                     </label>
                   ))}
                 </div>
@@ -254,9 +255,7 @@ function RoleCard({ role, isExpanded, onToggle, onUpdated }) {
 
               {/* Stages */}
               <div className="mb-5">
-                <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
-                  Pipeline Stage Access
-                </div>
+                <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Pipeline Stage Access</div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
                   {ALL_STAGES.map(s => (
                     <label key={s.key} className="flex items-center gap-2 cursor-pointer group">
@@ -266,9 +265,7 @@ function RoleCard({ role, isExpanded, onToggle, onUpdated }) {
                         onChange={() => toggleStage(s.key)}
                         className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                       />
-                      <span className="text-xs text-slate-600 group-hover:text-slate-800">
-                        {s.label}
-                      </span>
+                      <span className="text-xs text-slate-600 group-hover:text-slate-800">{s.label}</span>
                     </label>
                   ))}
                 </div>
@@ -282,20 +279,17 @@ function RoleCard({ role, isExpanded, onToggle, onUpdated }) {
                   className="btn-primary flex items-center gap-1.5"
                 >
                   <Save size={13} />
-                  {saving ? 'Saving...' : 'Save permissions'}
+                  {saving ? 'Saving...' : savedMsg ? '✓ Saved!' : 'Save permissions'}
                 </button>
 
-                {/* Predefined roles delete nahi kar sakte */}
-                {!['super_admin', 'presales_manager', 'presales_agent', 'sales_manager', 'sales_agent',
-                  'finance_manager', 'finance_agent', 'ops_manager', 'ops_agent', 'amc_manager', 'amc_agent']
-                  .includes(role.name) && (
-                    <button
-                      onClick={handleDelete}
-                      className="btn text-red-600 hover:bg-red-50 flex items-center gap-1.5"
-                    >
-                      <Trash2 size={13} /> Delete role
-                    </button>
-                  )}
+                {!PROTECTED_ROLES.includes(role.name) && (
+                  <button
+                    onClick={handleDelete}
+                    className="btn text-red-600 hover:bg-red-50 flex items-center gap-1.5"
+                  >
+                    <Trash2 size={13} /> Delete role
+                  </button>
+                )}
               </div>
             </>
           )}
@@ -307,15 +301,12 @@ function RoleCard({ role, isExpanded, onToggle, onUpdated }) {
 
 // ── Add Role Modal ───────────────────────────────────────────
 function AddRoleModal({ open, onClose }) {
-  const [form, setForm] = useState({
-    name: '', label: '', team: '', is_manager: false
-  })
+  const [form, setForm] = useState({ name: '', label: '', team: '', is_manager: false })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
   function set(f, v) { setForm(x => ({ ...x, [f]: v })) }
 
-  // label se auto name generate karo
   function handleLabelChange(val) {
     const autoName = val.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '')
     setForm(x => ({ ...x, label: val, name: autoName }))
@@ -345,27 +336,14 @@ function AddRoleModal({ open, onClose }) {
     <Modal open={open} onClose={onClose} title="New role banana" width={420}>
       {error && <p className="text-sm text-red-600 mb-3">{error}</p>}
       <div className="flex flex-col gap-3">
-
         <div>
           <label className="label">Display name <span className="text-slate-400 font-normal">(e.g. Survey Agent)</span></label>
-          <input
-            className="input"
-            value={form.label}
-            onChange={e => handleLabelChange(e.target.value)}
-            placeholder="Survey Agent"
-          />
+          <input className="input" value={form.label} onChange={e => handleLabelChange(e.target.value)} placeholder="Survey Agent" />
         </div>
-
         <div>
           <label className="label">Internal key <span className="text-slate-400 font-normal">(auto-generated)</span></label>
-          <input
-            className="input bg-slate-50 font-mono text-sm"
-            value={form.name}
-            onChange={e => set('name', e.target.value)}
-            placeholder="survey_agent"
-          />
+          <input className="input bg-slate-50 font-mono text-sm" value={form.name} onChange={e => set('name', e.target.value)} placeholder="survey_agent" />
         </div>
-
         <div>
           <label className="label">Team <span className="text-slate-400 font-normal">(optional)</span></label>
           <select className="select" value={form.team} onChange={e => set('team', e.target.value)}>
@@ -373,21 +351,13 @@ function AddRoleModal({ open, onClose }) {
             {TEAMS.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
         </div>
-
         <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={form.is_manager}
-            onChange={e => set('is_manager', e.target.checked)}
-            className="rounded border-slate-300 text-blue-600"
-          />
+          <input type="checkbox" checked={form.is_manager} onChange={e => set('is_manager', e.target.checked)} className="rounded border-slate-300 text-blue-600" />
           <span className="text-sm text-slate-700">Manager role hai (kanban access etc.)</span>
         </label>
-
         <p className="text-xs text-slate-400 bg-slate-50 rounded-lg p-3">
           Role banane ke baad usse expand karke pages aur stages ki permissions set karo.
         </p>
-
         <div className="flex gap-2 mt-1">
           <button onClick={onClose} className="btn flex-1 justify-center">Cancel</button>
           <button onClick={handleSave} disabled={saving} className="btn-primary flex-1 justify-center">

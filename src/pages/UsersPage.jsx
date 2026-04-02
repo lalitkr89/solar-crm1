@@ -1,21 +1,24 @@
 // src/pages/UsersPage.jsx
-// REPLACE existing file — role_id support add kiya, baaki sab same
-
 import { useEffect, useState } from 'react'
 import Layout from '@/components/layout/Layout'
 import { PageHeader, Avatar, Spinner, Modal } from '@/components/ui'
 import { supabase } from '@/lib/supabase'
-import { UserCog, Plus, RefreshCw, MapPin, X } from 'lucide-react'
+import { Plus, RefreshCw, MapPin, X, Pencil, Trash2 } from 'lucide-react'
 
-// Predefined roles (backward compat) — ab DB se bhi aate hain
 const LOCATION_ROLES_TEAMS = ['presales', 'sales']
+
+const TEAM_COLORS = {
+  presales: '#7F77DD', sales: '#378ADD', finance: '#1D9E75',
+  ops: '#D85A30', amc: '#BA7517',
+}
 
 export default function UsersPage() {
   const [users, setUsers] = useState([])
-  const [roles, setRoles] = useState([])   // DB se roles
+  const [roles, setRoles] = useState([])
   const [loading, setLoading] = useState(true)
   const [showAdd, setShowAdd] = useState(false)
   const [locationUser, setLocationUser] = useState(null)
+  const [editRoleUser, setEditRoleUser] = useState(null)  // ✅ role edit modal
 
   async function load() {
     setLoading(true)
@@ -42,7 +45,13 @@ export default function UsersPage() {
     load()
   }
 
-  // Role label — pehle DB se, fallback existing role string
+  // ✅ Delete user
+  async function handleDelete(user) {
+    if (!confirm(`"${user.name}" ko delete karna chahte ho? Yeh action undo nahi hoga.`)) return
+    await supabase.from('users').delete().eq('id', user.id)
+    load()
+  }
+
   function getRoleLabel(user) {
     if (user.role_data?.label) return user.role_data.label
     return user.role?.replace(/_/g, ' ') ?? '—'
@@ -57,11 +66,6 @@ export default function UsersPage() {
     return LOCATION_ROLES_TEAMS.includes(team)
   }
 
-  // Role ke hisaab se color
-  const TEAM_COLORS = {
-    presales: '#7F77DD', sales: '#378ADD', finance: '#1D9E75',
-    ops: '#D85A30', amc: '#BA7517',
-  }
   function getColor(user) {
     const team = user.role_data?.team ?? user.team
     return TEAM_COLORS[team] ?? '#378ADD'
@@ -77,17 +81,26 @@ export default function UsersPage() {
       </PageHeader>
 
       <div className="card p-0 overflow-hidden">
-        <div className="grid grid-cols-[1fr_180px_110px_150px_80px_80px] gap-3 px-4 py-2.5 bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wide">
-          <span>Name</span><span>Role</span><span>Team</span><span>Cities / State</span><span>Status</span><span>Action</span>
+        {/* ✅ Extra columns for Edit + Delete */}
+        <div className="grid grid-cols-[1fr_180px_110px_150px_80px_80px_60px] gap-3 px-4 py-2.5 bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wide">
+          <span>Name</span>
+          <span>Role</span>
+          <span>Team</span>
+          <span>Cities / State</span>
+          <span>Status</span>
+          <span>Toggle</span>
+          <span>Actions</span>
         </div>
 
         {loading ? (
           <div className="flex justify-center py-12"><Spinner size={22} /></div>
         ) : (
           users.map(user => (
-            <div key={user.id}
-              className="grid grid-cols-[1fr_180px_110px_150px_80px_80px] gap-3 px-4 py-3 border-b border-slate-100 items-center">
-
+            <div
+              key={user.id}
+              className="grid grid-cols-[1fr_180px_110px_150px_80px_80px_60px] gap-3 px-4 py-3 border-b border-slate-100 items-center"
+            >
+              {/* Name */}
               <div className="flex items-center gap-2.5">
                 <Avatar name={user.name} size={28} color={getColor(user)} />
                 <div>
@@ -96,12 +109,22 @@ export default function UsersPage() {
                 </div>
               </div>
 
-              <span className="text-xs font-medium text-slate-600 capitalize">
-                {getRoleLabel(user)}
-              </span>
+              {/* ✅ Role — click karo to edit */}
+              <button
+                onClick={() => setEditRoleUser(user)}
+                className="flex items-center gap-1.5 group text-left w-full"
+                title="Role change karo"
+              >
+                <span className="text-xs font-medium text-slate-600 capitalize group-hover:text-blue-600 transition-colors truncate">
+                  {getRoleLabel(user)}
+                </span>
+                <Pencil size={11} className="text-slate-300 group-hover:text-blue-500 flex-shrink-0 transition-colors" />
+              </button>
 
+              {/* Team */}
               <span className="text-xs text-slate-500 capitalize">{getTeam(user)}</span>
 
+              {/* Cities */}
               <div className="flex flex-col gap-0.5">
                 {canEditLocation(user) ? (
                   <button
@@ -122,17 +145,29 @@ export default function UsersPage() {
                 )}
               </div>
 
+              {/* Status */}
               <span className={`text-xs font-semibold ${user.is_active ? 'text-green-600' : 'text-red-500'}`}>
                 {user.is_active ? 'Active' : 'Inactive'}
               </span>
 
+              {/* Toggle active */}
               <button
                 onClick={() => toggleActive(user)}
                 className={`text-xs px-2 py-1 rounded-lg border font-medium transition-colors ${user.is_active
                   ? 'border-red-200 text-red-600 hover:bg-red-50'
                   : 'border-green-200 text-green-600 hover:bg-green-50'
-                  }`}>
+                  }`}
+              >
                 {user.is_active ? 'Disable' : 'Enable'}
+              </button>
+
+              {/* ✅ Delete */}
+              <button
+                onClick={() => handleDelete(user)}
+                className="text-slate-300 hover:text-red-500 transition-colors flex justify-center"
+                title="User delete karo"
+              >
+                <Trash2 size={15} />
               </button>
             </div>
           ))
@@ -144,8 +179,81 @@ export default function UsersPage() {
         roles={roles}
         onClose={() => { setShowAdd(false); load() }}
       />
-      <LocationModal user={locationUser} onClose={() => { setLocationUser(null); load() }} />
+
+      <LocationModal
+        user={locationUser}
+        onClose={() => { setLocationUser(null); load() }}
+      />
+
+      {/* ✅ Edit Role Modal */}
+      <EditRoleModal
+        user={editRoleUser}
+        roles={roles}
+        onClose={() => { setEditRoleUser(null); load() }}
+      />
     </Layout>
+  )
+}
+
+// ── EDIT ROLE MODAL ──────────────────────────────────────────
+function EditRoleModal({ user, roles, onClose }) {
+  const [roleId, setRoleId] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (!user) return
+    setRoleId(user.role_id ?? '')
+    setError('')
+  }, [user])
+
+  async function handleSave() {
+    if (!roleId) { setError('Role select karo'); return }
+    setSaving(true); setError('')
+    try {
+      const selectedRole = roles.find(r => r.id === roleId)
+      const { error: err } = await supabase
+        .from('users')
+        .update({
+          role_id: roleId,
+          role: selectedRole?.name ?? null,
+          team: selectedRole?.team ?? null,
+        })
+        .eq('id', user.id)
+      if (err) throw err
+      onClose()
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (!user) return null
+
+  return (
+    <Modal open={!!user} onClose={onClose} title={`Role change — ${user.name}`} width={400}>
+      {error && <p className="text-sm text-red-600 mb-3">{error}</p>}
+      <div className="flex flex-col gap-4">
+        <div>
+          <label className="label">New Role</label>
+          <select className="select" value={roleId} onChange={e => setRoleId(e.target.value)}>
+            <option value="">— Role select karo —</option>
+            {roles.map(r => (
+              <option key={r.id} value={r.id}>
+                {r.label} {r.team ? `(${r.team})` : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={onClose} className="btn flex-1 justify-center">Cancel</button>
+          <button onClick={handleSave} disabled={saving} className="btn-primary flex-1 justify-center">
+            {saving ? 'Saving...' : 'Save role'}
+          </button>
+        </div>
+      </div>
+    </Modal>
   )
 }
 
@@ -155,7 +263,6 @@ function AddUserModal({ open, onClose, roles }) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
-  // Default role_id — pehla role
   useEffect(() => {
     if (roles.length > 0 && !form.role_id) {
       setForm(x => ({ ...x, role_id: roles[0].id }))
@@ -170,21 +277,18 @@ function AddUserModal({ open, onClose, roles }) {
     }
     setSaving(true); setError('')
     try {
-      // Selected role ka data lao
       const selectedRole = roles.find(r => r.id === form.role_id)
-
       const { data, error: authErr } = await supabase.auth.admin.createUser({
         email: form.email, password: form.password, email_confirm: true
       })
       if (authErr) throw authErr
-
       await supabase.from('users').insert({
         id: data.user.id,
         name: form.name,
         email: form.email,
-        role: selectedRole?.name ?? null,    // backward compat
-        team: selectedRole?.team ?? null,    // backward compat
-        role_id: form.role_id,                 // new flexible system
+        role: selectedRole?.name ?? null,
+        team: selectedRole?.team ?? null,
+        role_id: form.role_id,
       })
       setForm({ name: '', email: '', password: '', role_id: roles[0]?.id ?? '' })
       onClose()
@@ -226,7 +330,7 @@ function AddUserModal({ open, onClose, roles }) {
   )
 }
 
-// ── LOCATION MODAL — unchanged ───────────────────────────────
+// ── LOCATION MODAL ───────────────────────────────────────────
 function LocationModal({ user, onClose }) {
   const [cities, setCities] = useState([])
   const [state, setState] = useState('')
@@ -273,7 +377,6 @@ function LocationModal({ user, onClose }) {
         Lead assignment: <strong>City match</strong> → <strong>State match</strong> → round-robin
       </p>
       {error && <p className="text-sm text-red-600 mb-3">{error}</p>}
-
       <div className="mb-4">
         <label className="label">Assigned Cities</label>
         <div className="flex gap-2 mb-2">
@@ -297,12 +400,10 @@ function LocationModal({ user, onClose }) {
           </div>
         )}
       </div>
-
       <div className="mb-5">
         <label className="label">Assigned State</label>
         <input className="input" placeholder="e.g. Rajasthan" value={state} onChange={e => setState(e.target.value)} />
       </div>
-
       <div className="flex gap-2">
         <button onClick={onClose} className="btn flex-1 justify-center">Cancel</button>
         <button onClick={handleSave} disabled={saving} className="btn-primary flex-1 justify-center">

@@ -27,7 +27,7 @@ const TEAM_COLOR = {
   amc: '#BA7517',
 }
 
-function NavContent({ onClose, profile, role, isSuperAdmin, isManager, onLogout, pendingCount = 0, pendingDispCount = 0, attendance }) {
+function NavContent({ onClose, profile, role, isSuperAdmin, isManager, canAccessPage, onLogout, pendingCount = 0, pendingDispCount = 0, attendance }) {
   const initial = profile?.name?.[0]?.toUpperCase() ?? '?'
   const teamColor = TEAM_COLOR[profile?.team] ?? '#378ADD'
   const { isAgent, currentStatus, liveSecs, switching, statuses, handleSwitch } = attendance
@@ -37,7 +37,6 @@ function NavContent({ onClose, profile, role, isSuperAdmin, isManager, onLogout,
   const cfg = currentStatus ? STATUS_MAP[currentStatus] : null
   const Icon = currentStatus ? STATUS_ICONS[currentStatus] : null
 
-  // Close dropdown on outside click
   useEffect(() => {
     if (!statusOpen) return
     function handleClick(e) {
@@ -69,8 +68,6 @@ function NavContent({ onClose, profile, role, isSuperAdmin, isManager, onLogout,
 
       {/* ── User card + Status dropdown ── */}
       <div ref={dropdownRef} className="mx-3 my-3 relative">
-
-        {/* Clickable user card */}
         <button
           onClick={() => isAgent ? setStatusOpen(o => !o) : null}
           style={{
@@ -85,8 +82,6 @@ function NavContent({ onClose, profile, role, isSuperAdmin, isManager, onLogout,
             gap: 10,
             transition: 'all 0.2s ease',
           }}>
-
-          {/* Avatar with status glow ring */}
           <div style={{ position: 'relative', flexShrink: 0 }}>
             <div style={{
               width: 32, height: 32, borderRadius: '50%',
@@ -98,7 +93,6 @@ function NavContent({ onClose, profile, role, isSuperAdmin, isManager, onLogout,
             }}>
               {initial}
             </div>
-            {/* Pulsing dot for active status */}
             {cfg && (
               <span style={{
                 position: 'absolute', bottom: 0, right: 0,
@@ -109,20 +103,14 @@ function NavContent({ onClose, profile, role, isSuperAdmin, isManager, onLogout,
               }} />
             )}
           </div>
-
-          {/* Name + status row */}
           <div style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
             <div style={{ color: '#fff', fontSize: 12, fontWeight: 600, lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {profile?.name ?? 'User'}
             </div>
             {isAgent && cfg ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
-                <span style={{ fontSize: 11, fontWeight: 600, color: cfg.color }}>
-                  {cfg.label}
-                </span>
-                <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', fontVariantNumeric: 'tabular-nums' }}>
-                  · {fmtSecs(liveSecs)}
-                </span>
+                <span style={{ fontSize: 11, fontWeight: 600, color: cfg.color }}>{cfg.label}</span>
+                <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', fontVariantNumeric: 'tabular-nums' }}>· {fmtSecs(liveSecs)}</span>
               </div>
             ) : (
               <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginTop: 2, textTransform: 'capitalize' }}>
@@ -130,8 +118,6 @@ function NavContent({ onClose, profile, role, isSuperAdmin, isManager, onLogout,
               </div>
             )}
           </div>
-
-          {/* Chevron */}
           {isAgent && (
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
               style={{ flexShrink: 0, transform: statusOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s ease' }}>
@@ -140,7 +126,6 @@ function NavContent({ onClose, profile, role, isSuperAdmin, isManager, onLogout,
           )}
         </button>
 
-        {/* ── Dropdown panel ── */}
         {isAgent && statusOpen && (
           <div ref={dropdownRef} style={{
             position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0, zIndex: 100,
@@ -163,19 +148,13 @@ function NavContent({ onClose, profile, role, isSuperAdmin, isManager, onLogout,
                     onClick={() => { handleSwitch(s.key); setStatusOpen(false) }}
                     disabled={switching}
                     style={{
-                      width: '100%',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 10,
-                      padding: '8px 10px',
-                      borderRadius: 10,
-                      border: 'none',
+                      width: '100%', display: 'flex', alignItems: 'center', gap: 10,
+                      padding: '8px 10px', borderRadius: 10, border: 'none',
                       background: isActive ? s.color + '22' : 'transparent',
                       cursor: switching ? 'not-allowed' : 'pointer',
                       opacity: switching && !isActive ? 0.5 : 1,
                       transition: 'background 0.15s ease',
                     }}>
-                    {/* Colored icon circle */}
                     <span style={{
                       width: 28, height: 28, borderRadius: 8, flexShrink: 0,
                       background: isActive ? s.color : s.color + '20',
@@ -189,12 +168,9 @@ function NavContent({ onClose, profile, role, isSuperAdmin, isManager, onLogout,
                     </span>
                     {isActive && (
                       <span style={{
-                        fontSize: 10, fontWeight: 700,
-                        color: s.color,
-                        background: s.color + '22',
-                        padding: '2px 7px',
-                        borderRadius: 20,
-                        fontVariantNumeric: 'tabular-nums',
+                        fontSize: 10, fontWeight: 700, color: s.color,
+                        background: s.color + '22', padding: '2px 7px',
+                        borderRadius: 20, fontVariantNumeric: 'tabular-nums',
                       }}>
                         {fmtSecs(liveSecs)}
                       </span>
@@ -212,84 +188,104 @@ function NavContent({ onClose, profile, role, isSuperAdmin, isManager, onLogout,
         )}
       </div>
 
-      {/* Nav */}
+      {/* ── Nav — ab canAccessPage se chalta hai ── */}
       <nav className="flex-1 px-2 pb-2 flex flex-col gap-0.5">
+
+        {/* MAIN — Dashboard aur Today's actions hamesha dikhenge (ya DB se check) */}
         <div className="section-label">Main</div>
 
-        <NavLink to="/" end onClick={onClose}
-          className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-          <LayoutDashboard size={15} /> Dashboard
-        </NavLink>
+        {canAccessPage('/') && (
+          <NavLink to="/" end onClick={onClose}
+            className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+            <LayoutDashboard size={15} /> Dashboard
+          </NavLink>
+        )}
 
-        <NavLink to="/today" onClick={onClose}
-          className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-          <CalendarCheck size={15} /> Today's actions
-        </NavLink>
+        {canAccessPage('/today') && (
+          <NavLink to="/today" onClick={onClose}
+            className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+            <CalendarCheck size={15} /> Today's actions
+          </NavLink>
+        )}
 
-        {(isManager || isSuperAdmin) && (
+        {canAccessPage('/kanban') && (
           <NavLink to="/kanban" onClick={onClose}
             className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
             <Kanban size={15} /> Pipeline kanban
           </NavLink>
         )}
 
-        {(role?.startsWith('presales') || isSuperAdmin) && (
-          <>
-            <div className="section-label">Pre-sales</div>
-            <NavLink to="/presales" onClick={onClose}
-              className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-              <Phone size={15} /> Calling dashboard
-            </NavLink>
-            <NavLink to="/bulk-import" onClick={onClose}
-              className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-              <Upload size={15} /> Bulk import
-            </NavLink>
-            {(role === 'presales_manager' || isSuperAdmin) && (
-              <>
-                <NavLink to="/ps-disposition-approvals" onClick={onClose}
-                  className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-                  <ClipboardCheck size={15} /> Disposition Approvals
-                  {pendingDispCount > 0 && (
-                    <span className="ml-auto bg-amber-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none">
-                      {pendingDispCount}
-                    </span>
-                  )}
-                </NavLink>
-                <NavLink to="/attendance" onClick={onClose}
-                  className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-                  <ClipboardList size={15} /> Attendance
-                </NavLink>
-              </>
-            )}
-          </>
+        {/* PRE-SALES */}
+        {(canAccessPage('/presales') || canAccessPage('/bulk-import') || canAccessPage('/ps-disposition-approvals') || canAccessPage('/attendance')) && (
+          <div className="section-label">Pre-sales</div>
         )}
 
-        {(role?.startsWith('sales') || isSuperAdmin) && (
-          <>
-            <div className="section-label">Sales</div>
-            <NavLink to="/sales" onClick={onClose}
-              className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-              <Users size={15} /> Meetings & leads
-            </NavLink>
-            <NavLink to="/sales-analytics" onClick={onClose}
-              className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-              <TrendingUp size={15} /> Analytics
-            </NavLink>
-            {(role === 'sales_manager' || isSuperAdmin) && (
-              <NavLink to="/sales-approval" onClick={onClose}
-                className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-                <ClipboardCheck size={15} /> Order Approvals
-                {pendingCount > 0 && (
-                  <span className="ml-auto bg-amber-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none">
-                    {pendingCount}
-                  </span>
-                )}
-              </NavLink>
-            )}
-          </>
+        {canAccessPage('/presales') && (
+          <NavLink to="/presales" onClick={onClose}
+            className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+            <Phone size={15} /> Calling dashboard
+          </NavLink>
         )}
 
-        {(role?.startsWith('finance') || isSuperAdmin) && (
+        {canAccessPage('/bulk-import') && (
+          <NavLink to="/bulk-import" onClick={onClose}
+            className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+            <Upload size={15} /> Bulk import
+          </NavLink>
+        )}
+
+        {canAccessPage('/ps-disposition-approvals') && (
+          <NavLink to="/ps-disposition-approvals" onClick={onClose}
+            className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+            <ClipboardCheck size={15} /> Disposition Approvals
+            {pendingDispCount > 0 && (
+              <span className="ml-auto bg-amber-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none">
+                {pendingDispCount}
+              </span>
+            )}
+          </NavLink>
+        )}
+
+        {canAccessPage('/attendance') && (
+          <NavLink to="/attendance" onClick={onClose}
+            className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+            <ClipboardList size={15} /> Attendance
+          </NavLink>
+        )}
+
+        {/* SALES */}
+        {(canAccessPage('/sales') || canAccessPage('/sales-analytics') || canAccessPage('/sales-approval')) && (
+          <div className="section-label">Sales</div>
+        )}
+
+        {canAccessPage('/sales') && (
+          <NavLink to="/sales" onClick={onClose}
+            className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+            <Users size={15} /> Meetings & leads
+          </NavLink>
+        )}
+
+        {canAccessPage('/sales-analytics') && (
+          <NavLink to="/sales-analytics" onClick={onClose}
+            className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+            <TrendingUp size={15} /> Analytics
+          </NavLink>
+        )}
+
+        {canAccessPage('/sales-approval') && (
+          <NavLink to="/sales-approval" onClick={onClose}
+            className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+            <ClipboardCheck size={15} /> Order Approvals
+            {pendingCount > 0 && (
+              <span className="ml-auto bg-amber-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none">
+                {pendingCount}
+              </span>
+            )}
+          </NavLink>
+        )}
+
+        {/* FINANCE */}
+        {canAccessPage('/finance') && (
           <>
             <div className="section-label">Finance</div>
             <NavLink to="/finance" onClick={onClose}
@@ -299,7 +295,8 @@ function NavContent({ onClose, profile, role, isSuperAdmin, isManager, onLogout,
           </>
         )}
 
-        {(role?.startsWith('ops') || isSuperAdmin) && (
+        {/* OPS */}
+        {canAccessPage('/ops') && (
           <>
             <div className="section-label">Ops</div>
             <NavLink to="/ops" onClick={onClose}
@@ -309,7 +306,8 @@ function NavContent({ onClose, profile, role, isSuperAdmin, isManager, onLogout,
           </>
         )}
 
-        {(role?.startsWith('amc') || isSuperAdmin) && (
+        {/* AMC */}
+        {canAccessPage('/amc') && (
           <>
             <div className="section-label">AMC</div>
             <NavLink to="/amc" onClick={onClose}
@@ -319,6 +317,7 @@ function NavContent({ onClose, profile, role, isSuperAdmin, isManager, onLogout,
           </>
         )}
 
+        {/* ADMIN — sirf super admin */}
         {isSuperAdmin && (
           <>
             <div className="section-label">Admin</div>
@@ -346,7 +345,7 @@ function NavContent({ onClose, profile, role, isSuperAdmin, isManager, onLogout,
 }
 
 export default function Sidebar() {
-  const { profile, role, isSuperAdmin, isManager, signOut } = useAuth()
+  const { profile, role, isSuperAdmin, isManager, canAccessPage, signOut } = useAuth()
   const navigate = useNavigate()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [pendingCount, setPendingCount] = useState(0)
@@ -354,14 +353,14 @@ export default function Sidebar() {
   const attendance = useAttendance()
 
   useEffect(() => {
-    if (role === 'sales_manager' || role === 'super_admin') {
+    if (canAccessPage('/sales-approval')) {
       supabase
         .from('leads')
         .select('id', { count: 'exact', head: true })
         .eq('stage', 'sale_pending_approval')
         .then(({ count }) => setPendingCount(count ?? 0))
     }
-    if (role === 'presales_manager' || role === 'super_admin') {
+    if (canAccessPage('/ps-disposition-approvals')) {
       supabase
         .from('disposition_approvals')
         .select('id', { count: 'exact', head: true })
@@ -371,13 +370,13 @@ export default function Sidebar() {
   }, [role])
 
   async function handleLogout() {
-    await attendance.handleClockOut()   // close attendance session
+    await attendance.handleClockOut()
     await signOut()
     navigate('/login')
   }
 
   const navProps = {
-    profile, role, isSuperAdmin, isManager,
+    profile, role, isSuperAdmin, isManager, canAccessPage,
     onLogout: handleLogout,
     pendingCount,
     pendingDispCount,
@@ -386,12 +385,12 @@ export default function Sidebar() {
 
   return (
     <>
-      {/* ── Desktop sidebar ── */}
+      {/* Desktop sidebar */}
       <aside className="sidebar">
         <NavContent {...navProps} onClose={null} />
       </aside>
 
-      {/* ── Mobile hamburger ── */}
+      {/* Mobile hamburger */}
       <button
         className="mobile-menu-btn"
         onClick={() => setMobileOpen(true)}
@@ -405,21 +404,13 @@ export default function Sidebar() {
         <Menu size={18} color="white" />
       </button>
 
-      {/* ── Mobile drawer ── */}
+      {/* Mobile drawer */}
       {mobileOpen && (
         <div className="mobile-overlay"
-          style={{
-            position: 'fixed', inset: 0, zIndex: 60,
-            display: 'flex',
-          }}>
-          {/* Backdrop */}
+          style={{ position: 'fixed', inset: 0, zIndex: 60, display: 'flex' }}>
           <div
             onClick={() => setMobileOpen(false)}
-            style={{
-              position: 'absolute', inset: 0,
-              background: 'rgba(0,0,0,0.5)',
-            }} />
-          {/* Drawer */}
+            style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)' }} />
           <div style={{
             position: 'relative', zIndex: 70,
             width: '75vw', maxWidth: 280,
