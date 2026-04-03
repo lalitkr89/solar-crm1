@@ -3,6 +3,7 @@ import { useAuth } from '@/context/AuthContext'
 import { supabase } from '@/lib/supabase'
 import { cleanPhone } from '@/lib/phone'
 import { applyFilter } from '../config/utils'
+import { PRESALES_VISIBLE_STAGES } from '@/config/stages'
 
 export function usePresalesLeads() {
   const { profile, isManager, isSuperAdmin } = useAuth()
@@ -21,7 +22,7 @@ export function usePresalesLeads() {
         presales_agent_id, presales_agent:presales_agent_id(name),
         sales_agent_id, sales_agent:sales_agent_id(name),
         updated_at`)
-      .in('stage', ['new', 'meeting_scheduled', 'qc_followup', 'non_qualified', 'not_interested', 'lost', 'sale_pending_approval', 'sale_closed', 'sale_rejected'])
+      .in('stage', PRESALES_VISIBLE_STAGES)
       .order('updated_at', { ascending: false })
 
     if (!isManager && !isSuperAdmin) q = q.eq('presales_agent_id', profile.id)

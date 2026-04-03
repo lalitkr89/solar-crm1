@@ -4,7 +4,7 @@ import { useAuth } from '@/context/AuthContext'
 import Layout from '@/components/layout/Layout'
 import { MetricCard, StageBadge, DispBadge, Spinner, PageHeader, EmptyState } from '@/components/ui'
 import { supabase } from '@/lib/supabase'
-import { STAGES } from '@/config/stages'
+import { STAGES, PRESALES_VISIBLE_STAGES } from '@/config/stages'
 import { maskPhone } from '@/lib/phone'
 import { format, addDays, startOfDay, subMonths, startOfMonth, endOfMonth, parseISO } from 'date-fns'
 import { Phone, Calendar, RefreshCw, TrendingUp, Users, IndianRupee, ChevronRight } from 'lucide-react'
@@ -259,7 +259,7 @@ function PresalesAgentDash({ profile }) {
       .from('leads')
       .select('id, name, phone, city, stage, disposition, call_status, calling_date, callback_date, callback_slot, meeting_date, meeting_slot, updated_at')
       .or(`presales_agent_id.eq.${profile.id},and(assigned_to.eq.${profile.id},stage.in.(new,meeting_scheduled,qc_followup))`)
-      .in('stage', ['new', 'meeting_scheduled', 'qc_followup', 'sale_closed'])
+      .in('stage', PRESALES_VISIBLE_STAGES)
       .order('updated_at', { ascending: false })
 
     const isAllTime = dateRange.from === '2020-01-01'
@@ -353,7 +353,7 @@ function PresalesManagerDash({ profile }) {
     let q = supabase
       .from('leads')
       .select('id, name, phone, city, stage, disposition, call_status, calling_date, callback_date, meeting_date, assigned_to, assigned_user:assigned_to(id,name), updated_at')
-      .in('stage', ['new', 'meeting_scheduled', 'qc_followup', 'sale_closed'])
+      .in('stage', PRESALES_VISIBLE_STAGES)
       .order('updated_at', { ascending: false })
 
     const isAllTime = dateRange.from === '2020-01-01'

@@ -1,7 +1,7 @@
 import { supabase } from '@/lib/supabase'
 import { format } from 'date-fns'
 
-// ─── Status config (shared across app) ───────────────────────────────────────
+// ─── Status config ────────────────────────────────────────────────────────────
 export const ATTENDANCE_STATUSES = [
   { key: 'active', label: 'Active', emoji: '🟢', color: '#16a34a', bg: '#dcfce7' },
   { key: 'hold', label: 'Hold', emoji: '🔴', color: '#dc2626', bg: '#fee2e2' },
@@ -12,19 +12,13 @@ export const ATTENDANCE_STATUSES = [
 
 export const STATUS_MAP = Object.fromEntries(ATTENDANCE_STATUSES.map(s => [s.key, s]))
 
-// ─── Activity action labels ───────────────────────────────────────────────────
 export const ACTIVITY_LABELS = {
-  login: 'Logged in',
-  logout: 'Logged out',
-  status_change: 'Status changed',
-  call_start: 'Call started',
-  call_end: 'Call ended',
-  lead_open: 'Lead opened',
-  disposition: 'Disposition saved',
-  lead_edit: 'Lead edited',
+  login: 'Logged in', logout: 'Logged out', status_change: 'Status changed',
+  call_start: 'Call started', call_end: 'Call ended', lead_open: 'Lead opened',
+  disposition: 'Disposition saved', lead_edit: 'Lead edited',
 }
 
-// ─── Format seconds → "1h 23m" / "45m 12s" ───────────────────────────────────
+// ─── Formatters ───────────────────────────────────────────────────────────────
 export function fmtSecs(secs) {
   if (!secs || secs <= 0) return '0m'
   const h = Math.floor(secs / 3600)
@@ -35,48 +29,102 @@ export function fmtSecs(secs) {
   return `${s}s`
 }
 
+export function fmtLoginHours(secs) {
+  if (!secs || secs <= 0) return null
+  const h = Math.floor(secs / 3600)
+  const m = Math.floor((secs % 3600) / 60)
+  if (h > 0 && m > 0) return `${h}h ${m}m`
+  if (h > 0) return `${h}h`
+  return `${m}m`
+}
+
 export function fmtTime(ts) {
   if (!ts) return '—'
   return format(new Date(ts), 'hh:mm a')
 }
 
-// ─── Get today's attendance row for this user ─────────────────────────────────
+// ─── Settings cache ───────────────────────────────────────────────────────────
+let _cache = null
+let _cacheAt = 0
+const CACHE_TTL = 5 * 60 * 1000
+
+export async function getAttendanceSettings() {
+  if (_cache && Date.now() - _cacheAt < CACHE_TTL) return _cache
+  const { data } = await supabase.from('attendance_settings').select('key, value')
+  const map = {}
+  data?.forEach(r => { map[r.key] = r.value })
+  _cache = {
+    thresholds: {
+      present_min_mins: map.thresholds?.present_min_mins ?? 540,
+      half_day_min_mins: map.thresholds?.half_day_min_mins ?? 300,
+      grace_period_mins: map.thresholds?.grace_period_mins ?? 15,
+    },
+    inactivity: {
+      enabled: map.inactivity?.enabled ?? true,
+      timeout_mins: map.inactivity?.timeout_mins ?? 120,
+      check_interval_mins: map.inactivity?.check_interval_mins ?? 5,
+    },
+    auto_logout: {
+      midnight_enabled: map.auto_logout?.midnight_enabled ?? true,
+      timezone: map.auto_logout?.timezone ?? 'Asia/Kolkata',
+    },
+    working_days: {
+      days: map.working_days?.days ?? [1, 2, 3, 4, 5, 6],
+      labels: map.working_days?.labels ?? ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
+    },
+  }
+  _cacheAt = Date.now()
+  return _cache
+}
+
+export function invalidateSettingsCache() { _cache = null; _cacheAt = 0 }
+
+export async function saveAttendanceSettings(key, value) {
+  const { error } = await supabase
+    .from('attendance_settings')
+    .upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: 'key' })
+  if (error) throw error
+  invalidateSettingsCache()
+}
+
+// ─── Compute P / H / L / null from login_secs ────────────────────────────────
+export function computeAttendanceStatus(loginSecs, thresholds) {
+  const mins = Math.floor((loginSecs ?? 0) / 60)
+  const { present_min_mins, half_day_min_mins } = thresholds
+  if (mins <= 0) return null
+  if (mins >= present_min_mins) return 'P'
+  if (mins >= half_day_min_mins) return 'H'
+  return 'L'
+}
+
+// ─── Get today's attendance ───────────────────────────────────────────────────
 export async function getTodayAttendance(userId) {
   const today = format(new Date(), 'yyyy-MM-dd')
-  const { data } = await supabase
-    .from('attendance')
-    .select('*')
-    .eq('user_id', userId)
-    .eq('date', today)
-    .maybeSingle()
+  const { data } = await supabase.from('attendance').select('*')
+    .eq('user_id', userId).eq('date', today).maybeSingle()
   return data
 }
 
-// ─── Clock in — create attendance row + first status_log ─────────────────────
+// ─── Clock in ─────────────────────────────────────────────────────────────────
 export async function clockIn(userId, markedBy) {
   const today = format(new Date(), 'yyyy-MM-dd')
   const now = new Date().toISOString()
 
-  const { data: att, error } = await supabase
-    .from('attendance')
-    .upsert({
-      user_id: userId,
-      date: today,
-      login_time: now,
-      status: 'active',
-      marked_by: markedBy,
-    }, { onConflict: 'user_id,date' })
-    .select()
-    .single()
+  const { data: att, error } = await supabase.from('attendance')
+    .upsert({ user_id: userId, date: today, login_time: now, status: 'active', marked_by: markedBy },
+      { onConflict: 'user_id,date' })
+    .select().single()
   if (error) throw error
 
   await supabase.from('attendance_status_logs').insert({
-    attendance_id: att.id,
-    user_id: userId,
-    status: 'active',
-    started_at: now,
-    date: today,
+    attendance_id: att.id, user_id: userId, status: 'active', started_at: now, date: today,
   })
+
+  // Auto-mark P — login_secs updated on clockOut
+  await supabase.from('attendance_records').upsert(
+    { user_id: userId, date: today, status: 'P', login_secs: 0, marked_by: markedBy, updated_at: now },
+    { onConflict: 'user_id,date' }
+  )
 
   return att
 }
@@ -86,45 +134,26 @@ export async function switchStatus(userId, newStatus) {
   const today = format(new Date(), 'yyyy-MM-dd')
   const now = new Date().toISOString()
 
-  const { data: att } = await supabase
-    .from('attendance')
-    .select('id')
-    .eq('user_id', userId)
-    .eq('date', today)
-    .maybeSingle()
+  const { data: att } = await supabase.from('attendance').select('id')
+    .eq('user_id', userId).eq('date', today).maybeSingle()
 
   if (!att) return clockIn(userId, userId)
 
-  const { data: openLog } = await supabase
-    .from('attendance_status_logs')
-    .select('id, started_at')
-    .eq('attendance_id', att.id)
-    .is('ended_at', null)
-    .order('started_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
+  const { data: openLog } = await supabase.from('attendance_status_logs')
+    .select('id, started_at').eq('attendance_id', att.id).is('ended_at', null)
+    .order('started_at', { ascending: false }).limit(1).maybeSingle()
 
   if (openLog) {
     const dur = Math.round((new Date(now) - new Date(openLog.started_at)) / 1000)
-    await supabase
-      .from('attendance_status_logs')
-      .update({ ended_at: now, duration_secs: dur })
-      .eq('id', openLog.id)
+    await supabase.from('attendance_status_logs')
+      .update({ ended_at: now, duration_secs: dur }).eq('id', openLog.id)
   }
 
   await supabase.from('attendance_status_logs').insert({
-    attendance_id: att.id,
-    user_id: userId,
-    status: newStatus,
-    started_at: now,
-    date: today,
+    attendance_id: att.id, user_id: userId, status: newStatus, started_at: now, date: today,
   })
 
-  await supabase
-    .from('attendance')
-    .update({ status: newStatus, updated_at: now })
-    .eq('id', att.id)
-
+  await supabase.from('attendance').update({ status: newStatus, updated_at: now }).eq('id', att.id)
   return att
 }
 
@@ -133,98 +162,76 @@ export async function clockOut(userId) {
   const today = format(new Date(), 'yyyy-MM-dd')
   const now = new Date().toISOString()
 
-  const { data: att } = await supabase
-    .from('attendance')
-    .select('id')
-    .eq('user_id', userId)
-    .eq('date', today)
-    .maybeSingle()
-
+  const { data: att } = await supabase.from('attendance').select('id, login_time')
+    .eq('user_id', userId).eq('date', today).maybeSingle()
   if (!att) return
 
-  const { data: openLog } = await supabase
-    .from('attendance_status_logs')
-    .select('id, started_at')
-    .eq('attendance_id', att.id)
-    .is('ended_at', null)
-    .maybeSingle()
+  const { data: openLog } = await supabase.from('attendance_status_logs')
+    .select('id, started_at').eq('attendance_id', att.id).is('ended_at', null).maybeSingle()
 
   if (openLog) {
     const dur = Math.round((new Date(now) - new Date(openLog.started_at)) / 1000)
-    await supabase
-      .from('attendance_status_logs')
-      .update({ ended_at: now, duration_secs: dur })
-      .eq('id', openLog.id)
+    await supabase.from('attendance_status_logs')
+      .update({ ended_at: now, duration_secs: dur }).eq('id', openLog.id)
   }
 
-  await supabase
-    .from('attendance')
-    .update({ logout_time: now, status: null, updated_at: now })
-    .eq('id', att.id)
+  await supabase.from('attendance')
+    .update({ logout_time: now, status: null, updated_at: now }).eq('id', att.id)
+
+  // Update attendance_records with actual duration + dynamic auto status
+  if (att.login_time) {
+    const totalSecs = Math.max(0, Math.round((new Date(now) - new Date(att.login_time)) / 1000))
+    const settings = await getAttendanceSettings()
+    const autoStatus = computeAttendanceStatus(totalSecs, settings.thresholds)
+
+    await supabase.from('attendance_records').upsert(
+      { user_id: userId, date: today, status: autoStatus, login_secs: totalSecs, updated_at: now },
+      { onConflict: 'user_id,date' }
+    )
+  }
 }
 
-// ─── Get today's status breakdown for a user ─────────────────────────────────
+// ─── Today breakdown ──────────────────────────────────────────────────────────
 export async function getDayBreakdown(userId, date) {
   const d = date ?? format(new Date(), 'yyyy-MM-dd')
-  const { data } = await supabase
-    .from('attendance_status_logs')
+  const { data } = await supabase.from('attendance_status_logs')
     .select('status, duration_secs, started_at, ended_at')
-    .eq('user_id', userId)
-    .eq('date', d)
+    .eq('user_id', userId).eq('date', d)
   return data ?? []
 }
 
-// ─── Manager: get all presales agents' today attendance ──────────────────────
+// ─── All presales today (live view) ──────────────────────────────────────────
 export async function getAllPresalesToday() {
   const today = format(new Date(), 'yyyy-MM-dd')
 
-  const { data: agents } = await supabase
-    .from('users')
-    .select('id, name')
-    .eq('team', 'presales')
-    .eq('is_active', true)
-    .order('name')
-
+  const { data: agents } = await supabase.from('users').select('id, name')
+    .eq('team', 'presales').eq('is_active', true).order('name')
   if (!agents?.length) return []
 
-  const { data: attRows } = await supabase
-    .from('attendance')
+  const { data: attRows } = await supabase.from('attendance')
     .select('id, user_id, login_time, logout_time, status')
-    .eq('date', today)
-    .in('user_id', agents.map(a => a.id))
+    .eq('date', today).in('user_id', agents.map(a => a.id))
 
-  const attIds = attRows?.map(a => a.id) ?? []
   let logs = []
-  if (attIds.length > 0) {
-    const { data: l } = await supabase
-      .from('attendance_status_logs')
+  if (attRows?.length) {
+    const { data: l } = await supabase.from('attendance_status_logs')
       .select('user_id, status, duration_secs, started_at, ended_at')
-      .eq('date', today)
-      .in('user_id', agents.map(a => a.id))
+      .eq('date', today).in('user_id', agents.map(a => a.id))
     logs = l ?? []
   }
 
-  // ── Fetch last activity for all agents ──────────────────────
-  const { data: activityRows } = await supabase
-    .from('agent_activity_log')
-    .select('user_id, action, meta, happened_at')
-    .in('user_id', agents.map(a => a.id))
+  const { data: activityRows } = await supabase.from('agent_activity_log')
+    .select('user_id, action, meta, happened_at').in('user_id', agents.map(a => a.id))
   const activityMap = {}
     ; (activityRows ?? []).forEach(r => { activityMap[r.user_id] = r })
 
-  // Aaj ki midnight — purane unclosed logs ko midnight se clamp karo
   const todayMidnight = new Date()
   todayMidnight.setHours(0, 0, 0, 0)
 
   return agents.map(agent => {
     const att = attRows?.find(a => a.user_id === agent.id)
     const myLogs = logs.filter(l => l.user_id === agent.id)
-
-    // Agar agent logout kar chuka hai to uski logout_time use karo cap ke liye
-    // Agar abhi bhi logged in hai to Date.now() use karo
-    const capTime = att?.logout_time
-      ? new Date(att.logout_time).getTime()
-      : Date.now()
+    const capTime = att?.logout_time ? new Date(att.logout_time).getTime() : Date.now()
 
     const breakdown = {}
     ATTENDANCE_STATUSES.forEach(s => {
@@ -233,17 +240,16 @@ export async function getAllPresalesToday() {
         .reduce((acc, l) => {
           let dur
           if (l.ended_at) {
-            // Properly closed log — use stored duration
             dur = l.duration_secs ?? 0
           } else if (att?.logout_time) {
-            // Agent logged out but log wasn't closed properly (edge case)
-            // Cap at logout_time, not Date.now()
             const from = Math.max(new Date(l.started_at).getTime(), todayMidnight.getTime())
-            const to = Math.min(capTime, Date.now())
-            dur = Math.max(0, Math.round((to - from) / 1000))
+            dur = Math.max(0, Math.round((Math.min(capTime, Date.now()) - from) / 1000))
           } else {
-            // Agent still active — count live from started_at (clamped to midnight)
-            const from = Math.max(new Date(l.started_at).getTime(), todayMidnight.getTime())
+            // Clamp to login_time — prevents inflated times from old open logs
+            const loginTs = att?.login_time
+              ? new Date(att.login_time).getTime()
+              : todayMidnight.getTime()
+            const from = Math.max(new Date(l.started_at).getTime(), loginTs)
             dur = Math.round((Date.now() - from) / 1000)
           }
           return acc + dur
@@ -251,29 +257,64 @@ export async function getAllPresalesToday() {
     })
 
     return {
-      id: agent.id,
-      name: agent.name,
-      loginTime: att?.login_time ?? null,
-      logoutTime: att?.logout_time ?? null,
-      currentStatus: att?.status ?? null,
+      id: agent.id, name: agent.name,
+      loginTime: att?.login_time ?? null, logoutTime: att?.logout_time ?? null,
+      currentStatus: att?.status ?? null, lastActivity: activityMap[agent.id] ?? null,
       breakdown,
-      lastActivity: activityMap[agent.id] ?? null,
     }
   })
 }
 
+// ─── Monthly records ──────────────────────────────────────────────────────────
+export async function fetchMonthlyRecords(year, month) {
+  const start = format(new Date(year, month, 1), 'yyyy-MM-dd')
+  const end = format(new Date(year, month + 1, 0), 'yyyy-MM-dd')
+
+  const { data: agents } = await supabase.from('users').select('id, name')
+    .eq('team', 'presales').eq('is_active', true).order('name')
+  if (!agents?.length) return { agents: [], records: {} }
+
+  const agentIds = agents.map(a => a.id)
+
+  const [{ data: recRows }, { data: attRows }] = await Promise.all([
+    supabase.from('attendance_records').select('user_id, date, status, login_secs')
+      .in('user_id', agentIds).gte('date', start).lte('date', end),
+    supabase.from('attendance').select('user_id, date, login_time, logout_time')
+      .in('user_id', agentIds).gte('date', start).lte('date', end),
+  ])
+
+  const attMap = {}
+  attRows?.forEach(a => {
+    if (!attMap[a.user_id]) attMap[a.user_id] = {}
+    attMap[a.user_id][a.date] = a
+  })
+
+  const settings = await getAttendanceSettings()
+  const records = {}
+  agents.forEach(a => { records[a.id] = {} })
+
+  recRows?.forEach(r => {
+    let login_secs = r.login_secs ?? 0
+    if (!login_secs) {
+      const att = attMap[r.user_id]?.[r.date]
+      if (att?.login_time && att?.logout_time) {
+        login_secs = Math.max(0, Math.round(
+          (new Date(att.logout_time) - new Date(att.login_time)) / 1000
+        ))
+      }
+    }
+    const status = r.status ?? computeAttendanceStatus(login_secs, settings.thresholds)
+    records[r.user_id][r.date] = { status, login_secs }
+  })
+
+  return { agents, records }
+}
+
 // ─── Lead time tracking ───────────────────────────────────────────────────────
 export async function startLeadTimer(leadId, userId) {
-  const { data, error } = await supabase
-    .from('lead_time_logs')
-    .insert({
-      lead_id: leadId,
-      user_id: userId,
-      started_at: new Date().toISOString(),
-      date: format(new Date(), 'yyyy-MM-dd'),
-    })
-    .select()
-    .single()
+  const { data, error } = await supabase.from('lead_time_logs')
+    .insert({ lead_id: leadId, user_id: userId, started_at: new Date().toISOString(), date: format(new Date(), 'yyyy-MM-dd') })
+    .select().single()
   if (error) console.error('Lead timer start error:', error)
   return data?.id ?? null
 }
@@ -281,61 +322,32 @@ export async function startLeadTimer(leadId, userId) {
 export async function stopLeadTimer(logId) {
   if (!logId) return
   const now = new Date().toISOString()
-  const { data: log } = await supabase
-    .from('lead_time_logs')
-    .select('started_at')
-    .eq('id', logId)
-    .single()
-
+  const { data: log } = await supabase.from('lead_time_logs').select('started_at').eq('id', logId).single()
   const dur = log ? Math.round((new Date(now) - new Date(log.started_at)) / 1000) : 0
-  await supabase
-    .from('lead_time_logs')
-    .update({ ended_at: now, duration_secs: dur })
-    .eq('id', logId)
+  await supabase.from('lead_time_logs').update({ ended_at: now, duration_secs: dur }).eq('id', logId)
 }
 
 export async function getLeadTimeLogs(leadId) {
-  const { data } = await supabase
-    .from('lead_time_logs')
-    .select('*, agent:user_id(name)')
-    .eq('lead_id', leadId)
-    .order('started_at', { ascending: false })
+  const { data } = await supabase.from('lead_time_logs').select('*, agent:user_id(name)')
+    .eq('lead_id', leadId).order('started_at', { ascending: false })
   return data ?? []
 }
 
 export async function getAgentLeadStats(userId, date) {
   const d = date ?? format(new Date(), 'yyyy-MM-dd')
-  const { data } = await supabase
-    .from('lead_time_logs')
+  const { data } = await supabase.from('lead_time_logs')
     .select('lead_id, duration_secs, started_at')
-    .eq('user_id', userId)
-    .eq('date', d)
-    .not('duration_secs', 'is', null)
+    .eq('user_id', userId).eq('date', d).not('duration_secs', 'is', null)
   return data ?? []
 }
 
 // ─── Activity tracking ────────────────────────────────────────────────────────
-// Har meaningful agent action pe call karo.
-// One row per agent (upsert on user_id) — sirf latest activity store hoti hai.
-//
-// action values:
-//   login | logout | status_change | call_start | call_end
-//   lead_open | disposition | lead_edit
-
 export async function trackActivity(userId, action, meta = {}) {
   if (!userId) return
   try {
     await supabase.from('agent_activity_log').upsert(
-      {
-        user_id: userId,
-        action,
-        meta: meta ?? {},
-        happened_at: new Date().toISOString(),
-      },
+      { user_id: userId, action, meta: meta ?? {}, happened_at: new Date().toISOString() },
       { onConflict: 'user_id' }
     )
-  } catch (e) {
-    // non-critical — swallow
-    console.warn('trackActivity failed:', e)
-  }
+  } catch (e) { console.warn('trackActivity failed:', e) }
 }
